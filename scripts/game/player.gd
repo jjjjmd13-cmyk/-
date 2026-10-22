@@ -15,7 +15,7 @@ const DASH_TIME := 0.18
 const DASH_SPEED_MULT := 3.4
 const HIT_INVULN := 0.6
 ## Barrier (Astra's passive): regrows after this many seconds without being hit.
-const BARRIER_DELAY := 5.0
+const BARRIER_DELAY := 6.0
 const BARRIER_REGEN := 15.0
 const AIM_ASSIST_RANGE := 750.0
 
@@ -580,7 +580,7 @@ func _shadowstep_hits() -> void:
 # ------------------------------------------------------------------ damage
 func shield_max() -> float:
 	var base: float = data.get("barrier", 0.0)
-	return base + max_hp * 0.1 if base > 0.0 else 0.0
+	return base + max_hp * 0.08 if base > 0.0 else 0.0
 
 
 func apply_pull(v: Vector2) -> void:
