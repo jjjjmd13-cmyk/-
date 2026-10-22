@@ -46,8 +46,11 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	match kind:
 		"arrow":
-			draw_line(Vector2(-26, 0), Vector2(0, 0), Color(0.75, 0.7, 0.6), 2.5, true)
-			draw_colored_polygon(PackedVector2Array([Vector2(0, -4), Vector2(9, 0), Vector2(0, 4)]), Color(0.4, 0.9, 1.0))
+			# Bigger, glowing arrow so it reads clearly on the detailed floor.
+			draw_line(Vector2(-44, 0), Vector2(4, 0), Color(0.3, 0.85, 1.0, 0.22), 12.0, true)
+			draw_line(Vector2(-36, 0), Vector2(0, 0), Color(0.92, 0.88, 0.78), 3.5, true)
+			draw_colored_polygon(PackedVector2Array([Vector2(0, -7), Vector2(15, 0), Vector2(0, 7)]), Color(0.45, 0.95, 1.0))
+			draw_circle(Vector2(6, 0), 9.0, Color(0.4, 0.9, 1.0, 0.25))
 		"spear":
 			draw_line(Vector2(-70, 0), Vector2(0, 0), Color(1, 0.1, 0.2, 0.3), 12.0, true)
 			draw_line(Vector2(-60, 0), Vector2(0, 0), Color(0.85, 0.1, 0.18), 4.0, true)
