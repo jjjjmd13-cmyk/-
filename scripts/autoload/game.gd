@@ -7,6 +7,11 @@ const SAVE_PATH := "user://save.cfg"
 const HEROES := preload("res://scripts/data/heroes.gd")
 const STRINGS := preload("res://scripts/data/strings.gd")
 
+const DIFFICULTY := {
+	"normal": {"hp": 1.0, "damage": 1.0, "spawn": 1.0},
+	"hard": {"hp": 1.4, "damage": 1.3, "spawn": 1.25},
+}
+
 const COLOR_GOLD := Color(0.86, 0.71, 0.42)
 const COLOR_CRIMSON := Color(0.62, 0.1, 0.14)
 const COLOR_TEXT := Color(0.93, 0.89, 0.84)
@@ -14,6 +19,8 @@ const COLOR_DIM := Color(0.62, 0.57, 0.53)
 const COLOR_PANEL := Color(0.08, 0.06, 0.07, 0.94)
 
 var selected_hero := "knight"
+## "normal" or "hard"; see DIFFICULTY for the multipliers.
+var difficulty := "normal"
 var settings := {
 	"master": 0.8,
 	"music": 0.6,
@@ -133,7 +140,7 @@ func _unhandled_input(event: InputEvent) -> void:
 # --------------------------------------------------------------- records
 func get_record(hero_id: String) -> Dictionary:
 	if not records.has(hero_id):
-		records[hero_id] = {"best_wave": 0, "wins": 0, "best_kills": 0, "runs": 0}
+		records[hero_id] = {"best_wave": 0, "wins": 0, "hard_wins": 0, "best_kills": 0, "runs": 0}
 	return records[hero_id]
 
 
@@ -146,6 +153,8 @@ func submit_run(hero_id: String, wave: int, kills: int, won: bool) -> bool:
 	rec.best_kills = maxi(int(rec.best_kills), kills)
 	if won:
 		rec.wins = int(rec.wins) + 1
+		if difficulty == "hard":
+			rec.hard_wins = int(rec.hard_wins) + 1
 	save()
 	return new_best
 
@@ -158,6 +167,7 @@ func save() -> void:
 	for h in records:
 		cfg.set_value("records", h, records[h])
 	cfg.set_value("meta", "selected_hero", selected_hero)
+	cfg.set_value("meta", "difficulty", difficulty)
 	var err := cfg.save(SAVE_PATH)
 	if err != OK:
 		push_warning("Could not write save file: %s" % error_string(err))
@@ -183,6 +193,9 @@ func _load() -> void:
 	var hero = cfg.get_value("meta", "selected_hero", selected_hero)
 	if hero is String and HEROES.ORDER.has(hero):
 		selected_hero = hero
+	var diff = cfg.get_value("meta", "difficulty", difficulty)
+	if diff is String and DIFFICULTY.has(diff):
+		difficulty = diff
 
 
 # --------------------------------------------------------------- input

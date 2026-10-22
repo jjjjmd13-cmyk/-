@@ -235,24 +235,29 @@ func _start_wave(n: int) -> void:
 		Audio.play_music("boss")
 		_spawn_boss()
 	else:
-		_hud.show_banner(Game.t("wave_banner") % wave, "")
+		var hint := ""
+		if wave == 1:
+			# First-wave reminder of the controls for the active input device.
+			hint = Game.t("hint_pad" if Input.get_connected_joypads().size() > 0 else "hint_keys")
+		_hud.show_banner(Game.t("wave_banner") % wave, hint, 6.0 if wave == 1 else 3.0)
 		Audio.play("wave_horn")
 		Audio.play_music("battle")
 
 
 func _hp_mult() -> float:
 	var w := float(wave - 1)
-	return 1.0 + 0.16 * w + 0.012 * w * w
+	return (1.0 + 0.16 * w + 0.012 * w * w) * float(Game.DIFFICULTY[Game.difficulty].hp)
 
 
 func _dmg_mult() -> float:
-	return 1.0 + 0.07 * float(wave - 1)
+	return (1.0 + 0.07 * float(wave - 1)) * float(Game.DIFFICULTY[Game.difficulty].damage)
 
 
 func _spawn_group() -> void:
 	var boss_alive: bool = is_instance_valid(boss) and not boss.dead
-	var interval := maxf(0.25, 1.05 - 0.055 * wave)
-	var cap := mini(50 + wave * 9, MAX_ENEMIES)
+	var spawn_rate := float(Game.DIFFICULTY[Game.difficulty].spawn)
+	var interval := maxf(0.25, 1.05 - 0.055 * wave) / spawn_rate
+	var cap := mini(int((50 + wave * 9) * spawn_rate), MAX_ENEMIES)
 	if boss_alive:
 		# Fewer adds during boss fights so the duel stays the focus.
 		interval *= 3.0
@@ -326,7 +331,7 @@ func _spawn_boss() -> void:
 	boss = spawn_enemy_at("boss", pos)
 	# Bosses scale less steeply than the horde so fights stay reasonable.
 	var mult := 1.0 + 0.6 * float(BOSS_WAVES.find(wave))
-	boss.max_hp = Enemy.KINDS.boss.hp * mult * (1.0 + 0.05 * wave)
+	boss.max_hp = Enemy.KINDS.boss.hp * mult * (1.0 + 0.05 * wave) * float(Game.DIFFICULTY[Game.difficulty].hp)
 	boss.hp = boss.max_hp
 	shake(10.0)
 

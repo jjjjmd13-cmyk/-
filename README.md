@@ -17,6 +17,8 @@
 
 적: 구울, 박쥐, 해골 궁수, 돌진하는 거인, 사교도, 보스 공포의 기사(2페이즈: 내려찍기·돌진·탄막·소환). 6웨이브부터 강화된 정예 몬스터가 등장합니다.
 
+난이도: 영웅 선택 화면에서 **보통 / 어려움** 을 고를 수 있습니다. 어려움은 적 체력 ×1.4, 공격력 ×1.3, 등장량 ×1.25 이며 영웅별로 어려움 승리 기록이 따로 저장됩니다.
+
 ## 조작법
 
 | 동작 | 키보드 & 마우스 | 게임패드 |
@@ -68,13 +70,19 @@ tools/       에셋 생성 스크립트 (초상화 배경 제거, 사운드 합�
 
 ## 자동 테스트
 
-봇이 실제로 게임을 끝까지 플레이하며 오류·진행 시간·받은 피해를 기록합니다.
+봇이 실제로 게임을 끝까지 플레이하며 오류·진행 시간·받은 피해를 기록합니다. 보통 난이도에서 봇은 8판 중 7판을 클리어했습니다(판당 약 13~16분).
+
+모든 화면 스크린샷(스토어 이미지용으로도 사용 가능):
+
+```bash
+godot --fixed-fps 60 --resolution 1920x1080 res://tests/screenshot.tscn -- ./screenshots
+```
 
 ```bash
 # 영웅 하나, 최대 25분 (게임 시간)
 godot --headless --fixed-fps 60 res://tests/autoplay.tscn -- knight 25
-# 영웅 4명 전부
-godot --headless --fixed-fps 60 res://tests/autoplay.tscn -- all 25
+# 영웅 4명 전부, 어려움 난이도
+godot --headless --fixed-fps 60 res://tests/autoplay.tscn -- all 25 hard
 ```
 
 ## 텍스트·밸런스 수정
@@ -83,6 +91,7 @@ godot --headless --fixed-fps 60 res://tests/autoplay.tscn -- all 25
 - 영웅 능력치: `scripts/data/heroes.gd`
 - 적 능력치: `scripts/game/enemy.gd` 의 `KINDS`
 - 웨이브 길이·적 등장 비율·보스 체력: `scripts/game/world.gd`
+- 난이도 배율: `scripts/autoload/game.gd` 의 `DIFFICULTY`
 - 레벨업 강화 목록: `scripts/data/upgrades.gd`
 
 ## 스팀 출시 전 체크리스트

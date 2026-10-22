@@ -104,6 +104,14 @@ func _ready() -> void:
 		r.add_child(pips)
 		_stat_bars.append(pips)
 		right.add_child(r)
+	var diff_btn := UI.button("", func() -> void: pass, 454)
+	diff_btn.custom_minimum_size.y = 56
+	diff_btn.pressed.connect(func() -> void:
+		Game.difficulty = "hard" if Game.difficulty == "normal" else "normal"
+		Game.save()
+		_update_difficulty(diff_btn))
+	_update_difficulty(diff_btn)
+	right.add_child(diff_btn)
 	var btns := HBoxContainer.new()
 	btns.add_theme_constant_override("separation", 14)
 	right.add_child(btns)
@@ -115,6 +123,14 @@ func _ready() -> void:
 
 	_focus_hero(Game.selected_hero)
 	(_cards[Game.selected_hero] as Button).grab_focus.call_deferred()
+
+
+func _update_difficulty(b: Button) -> void:
+	var hard := Game.difficulty == "hard"
+	b.text = "%s: %s" % [Game.t("difficulty"), Game.t("diff_hard" if hard else "diff_normal")]
+	b.add_theme_color_override("font_color", Color(1, 0.45, 0.4) if hard else Game.COLOR_TEXT)
+	b.add_theme_color_override("font_focus_color", Color(1, 0.45, 0.4) if hard else Color(1, 0.95, 0.85))
+	b.add_theme_color_override("font_hover_color", Color(1, 0.45, 0.4) if hard else Color(1, 0.95, 0.85))
 
 
 func _make_card(id: String) -> Button:
@@ -168,7 +184,7 @@ func _focus_hero(id: String) -> void:
 	_attack_l.text = "%s  |  %s" % [Game.t("label_attack"), Game.t(d.attack)]
 	_skill_l.text = "%s  |  %s" % [Game.t("label_skill"), Game.t(d.skill)]
 	var rec := Game.get_record(id)
-	_record_l.text = Game.t("record_best") % [int(rec.best_wave), int(rec.wins)]
+	_record_l.text = Game.t("record_best") % [int(rec.best_wave), int(rec.wins), int(rec.hard_wins)]
 	for i in _stat_bars.size():
 		_stat_bars[i].value = d.ratings[i]
 		_stat_bars[i].color = d.accent

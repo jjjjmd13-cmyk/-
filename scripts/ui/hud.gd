@@ -20,9 +20,10 @@ func _ready() -> void:
 	add_child(_canvas)
 
 
-func show_banner(text: String, sub: String) -> void:
+func show_banner(text: String, sub: String, duration: float = 3.0) -> void:
 	_canvas.banner = text
 	_canvas.banner_sub = sub
+	_canvas.banner_len = duration
 	_canvas.banner_t = 0.0
 
 
@@ -33,6 +34,7 @@ class HudCanvas extends Control:
 	var banner := ""
 	var banner_sub := ""
 	var banner_t := 99.0
+	var banner_len := 3.0
 	var _shown_hp := 1.0
 
 	func _process(delta: float) -> void:
@@ -96,6 +98,8 @@ class HudCanvas extends Control:
 		var rx := size_v.x - 30
 		_text_right(f, preload("res://scripts/ui/ui.gd").format_time(world.run_time), Vector2(rx, 56), 34, Game.COLOR_TEXT)
 		_text_right(fr, Game.t("hud_kills") % world.kills, Vector2(rx, 94), 24, Game.COLOR_DIM)
+		if Game.difficulty == "hard":
+			_text_right(f, Game.t("diff_hard"), Vector2(rx, 128), 22, Color(1, 0.4, 0.35))
 
 		# ---- Cooldowns (bottom-centre).
 		var by := size_v.y - 90
@@ -103,8 +107,8 @@ class HudCanvas extends Control:
 		_cooldown(Vector2(cx + 70, by), Game.t("hud_dash"), 1.0 - p.dash_timer / p.dash_cd, Color(0.8, 0.8, 0.85))
 
 		# ---- Banner.
-		if banner_t < 3.0:
-			var a := clampf(banner_t / 0.3, 0.0, 1.0) * clampf((3.0 - banner_t) / 0.6, 0.0, 1.0)
+		if banner_t < banner_len:
+			var a := clampf(banner_t / 0.3, 0.0, 1.0) * clampf((banner_len - banner_t) / 0.6, 0.0, 1.0)
 			var y := size_v.y * 0.32
 			draw_rect(Rect2(0, y - 70, size_v.x, 130 if banner_sub != "" else 100), Color(0, 0, 0, 0.45 * a))
 			_text_center(f, banner, Vector2(cx, y), 64, Color(Game.COLOR_GOLD.r, Game.COLOR_GOLD.g, Game.COLOR_GOLD.b, a), true)

@@ -1,7 +1,7 @@
 extends Node
 ## Automated play-test: a bot plays full runs with every hero and reports
 ## errors, progress and balance numbers. Not included in exports.
-##   godot --headless --fixed-fps 60 res://tests/autoplay.tscn -- [hero] [max_minutes]
+##   godot --headless --fixed-fps 60 res://tests/autoplay.tscn -- [hero|all] [max_minutes] [normal|hard]
 
 const MainScene := preload("res://scenes/main.tscn")
 const FX := preload("res://scripts/game/fx.gd")
@@ -28,6 +28,7 @@ func _ready() -> void:
 		_heroes = [args[0]]
 	if args.size() > 1:
 		_max_time = float(args[1]) * 60.0
+	Game.difficulty = args[2] if args.size() > 2 else "normal"
 	Game.settings.damage_numbers = true
 	_main = MainScene.instantiate()
 	add_child(_main)
