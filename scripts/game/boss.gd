@@ -4,7 +4,7 @@ extends "res://scripts/game/enemy.gd"
 
 const BOSSES := {
 	"dread_knight": {"hp": 1500.0, "speed": 100.0, "damage": 24.0, "radius": 46.0, "xp": 80},
-	"blood_witch": {"hp": 1200.0, "speed": 115.0, "damage": 22.0, "radius": 40.0, "xp": 90},
+	"blood_witch": {"hp": 1000.0, "speed": 115.0, "damage": 22.0, "radius": 40.0, "xp": 90},
 	"void_lord": {"hp": 1750.0, "speed": 85.0, "damage": 26.0, "radius": 52.0, "xp": 120},
 }
 const ORDER := ["dread_knight", "blood_witch", "void_lord"]
