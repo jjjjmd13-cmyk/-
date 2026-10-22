@@ -50,6 +50,8 @@ var action_anim := "attack"
 ## Seconds the current attack animation should last (sprite art is retimed to fit).
 var action_len := 0.25
 var dead := false
+## 0..1 fill of the hero's barrier, drawn as a faint bubble.
+var shield_frac := 0.0
 var stealth_alpha := 1.0
 
 var _p: Dictionary
@@ -120,6 +122,10 @@ func _draw() -> void:
 		var pulse := 0.75 + 0.25 * sin(time * 4.0)
 		draw_arc(Vector2.ZERO, 34.0, 0, TAU, 40, Color(ring_color.r, ring_color.g, ring_color.b, 0.85 * pulse), 4.0, true)
 	draw_set_transform(Vector2.ZERO)
+	if shield_frac > 0.01:
+		var c := Vector2(0, -52)
+		draw_circle(c, 58.0, Color(0.45, 0.65, 1.0, 0.07 + 0.06 * shield_frac))
+		draw_arc(c, 58.0, -PI / 2, -PI / 2 + TAU * shield_frac, 48, Color(0.6, 0.8, 1.0, 0.55), 2.5, true)
 	if _sprite:
 		return
 

@@ -64,8 +64,15 @@ class HudCanvas extends Control:
 		_bar(bar, 1.0, Color(0.06, 0.03, 0.04, 0.92))
 		_bar(bar, _shown_hp, Color(0.9, 0.85, 0.75, 0.5))
 		_bar(bar, frac, Color(0.75, 0.1, 0.14))
+		var smax: float = p.shield_max()
+		if smax > 0.0 and p.shield > 0.0:
+			# Barrier shown as a blue strip along the top of the health bar.
+			var sb := Rect2(bar.position, Vector2(bar.size.x, 9))
+			_bar(sb, clampf(p.shield / smax, 0.0, 1.0), Color(0.45, 0.7, 1.0, 0.95))
 		draw_rect(bar, Color(0.55, 0.42, 0.28), false, 2.0)
 		var hp_txt := "%d / %d" % [ceili(p.hp), roundi(p.max_hp)]
+		if p.shield >= 1.0:
+			hp_txt += "  (+%d)" % floori(p.shield)
 		_text_center(f, hp_txt, bar.get_center() + Vector2(0, 8), 22, Color.WHITE)
 
 		var xbar := Rect2(origin + Vector2(130, 50), Vector2(420, 18))

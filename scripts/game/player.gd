@@ -14,6 +14,9 @@ const SLOTS := ["skill", "skill2", "ult"]
 const DASH_TIME := 0.18
 const DASH_SPEED_MULT := 3.4
 const HIT_INVULN := 0.6
+## Barrier (Astra's passive): regrows after this many seconds without being hit.
+const BARRIER_DELAY := 5.0
+const BARRIER_REGEN := 15.0
 const AIM_ASSIST_RANGE := 750.0
 
 var world: Node
@@ -30,6 +33,9 @@ var crit_chance := 0.1
 var crit_mult := 1.75
 var armor := 0.0
 var regen := 0.0
+## Damage-absorbing barrier; heroes without the passive keep it at 0.
+var shield := 0.0
+var _shield_delay := 0.0
 var lifesteal := 0.0
 var pickup_range := 130.0
 ## Multiplier on every skill cooldown (the Focus upgrade lowers it).
@@ -99,6 +105,7 @@ func setup(p_hero: String, p_world: Node) -> void:
 	# The ultimate starts half charged so it shows up early in a run.
 	timers = {"skill": 0.0, "skill2": 0.0, "ult": data.ult_cd * 0.5}
 	dash_cd = data.dash_cd
+	shield = shield_max()
 
 
 func _ready() -> void:
@@ -139,6 +146,11 @@ func _physics_process(delta: float) -> void:
 	_awaken_t = maxf(0.0, _awaken_t - delta)
 	if regen > 0.0 and hp < max_hp:
 		heal(regen * delta, false)
+	if shield_max() > 0.0:
+		_shield_delay -= delta
+		if _shield_delay <= 0.0:
+			shield = minf(shield_max(), shield + BARRIER_REGEN * delta)
+	_visual.shield_frac = shield / shield_max() if shield_max() > 0.0 else 0.0
 
 	_update_aim()
 	var move := Input.get_vector("move_left", "move_right", "move_up", "move_down")
@@ -566,6 +578,11 @@ func _shadowstep_hits() -> void:
 
 
 # ------------------------------------------------------------------ damage
+func shield_max() -> float:
+	var base: float = data.get("barrier", 0.0)
+	return base + max_hp * 0.1 if base > 0.0 else 0.0
+
+
 func apply_pull(v: Vector2) -> void:
 	_pull = v
 
@@ -587,6 +604,18 @@ func take_damage(amount: float, source: Node) -> bool:
 	var final := amount * (1.0 - clampf(armor, 0.0, 0.7))
 	if _awaken_t > 0.0:
 		final *= 0.7
+	if shield_max() > 0.0:
+		_shield_delay = BARRIER_DELAY
+		var soaked := minf(shield, final)
+		if soaked > 0.0:
+			shield -= soaked
+			final -= soaked
+			world.show_damage(global_position + Vector2(0, -110), soaked, Color(0.55, 0.75, 1.0), false)
+			if final <= 0.0:
+				# Fully absorbed: brief protection, no health lost.
+				_invuln = HIT_INVULN * 0.5
+				Audio.play("magic", -8.0, 0.2)
+				return true
 	hp -= final
 	var src_kind := "unknown"
 	if is_instance_valid(source) and "kind" in source:
