@@ -211,10 +211,12 @@ func _setup_input() -> void:
 	_add_action("aim_down", [], [_axis(JOY_AXIS_RIGHT_Y, 1.0)])
 	_add_action("attack", [_mouse(MOUSE_BUTTON_LEFT), _key(KEY_J)],
 		[_axis(JOY_AXIS_TRIGGER_RIGHT, 1.0), _joy(JOY_BUTTON_X)])
-	_add_action("skill", [_mouse(MOUSE_BUTTON_RIGHT), _key(KEY_K), _key(KEY_E)],
-		[_axis(JOY_AXIS_TRIGGER_LEFT, 1.0), _joy(JOY_BUTTON_Y)])
+	_add_action("skill", [_mouse(MOUSE_BUTTON_RIGHT), _key(KEY_K)],
+		[_axis(JOY_AXIS_TRIGGER_LEFT, 1.0)])
+	_add_action("skill2", [_key(KEY_Q), _key(KEY_E), _key(KEY_I)], [_joy(JOY_BUTTON_RIGHT_SHOULDER)])
+	_add_action("ult", [_key(KEY_R), _key(KEY_O)], [_joy(JOY_BUTTON_Y)])
 	_add_action("dash", [_key(KEY_SPACE), _key(KEY_SHIFT), _key(KEY_L)],
-		[_joy(JOY_BUTTON_A), _joy(JOY_BUTTON_RIGHT_SHOULDER)])
+		[_joy(JOY_BUTTON_A), _joy(JOY_BUTTON_LEFT_SHOULDER)])
 	_add_action("pause", [_key(KEY_ESCAPE), _key(KEY_P)], [_joy(JOY_BUTTON_START)])
 	_add_action("fullscreen", [_key(KEY_F11)], [])
 	for a in ["move_left", "move_right", "move_up", "move_down"]:

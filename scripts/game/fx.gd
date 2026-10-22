@@ -221,3 +221,29 @@ class Afterimage extends Node2D:
 		draw_colored_polygon(PackedVector2Array([
 			Vector2(-16, 0), Vector2(16, 0), Vector2(12, -48), Vector2(0, -66), Vector2(-12, -48)]),
 			Color(color.r, color.g, color.b, a))
+
+
+## Giant golden sword plunging from the sky (knight ultimate).
+class SwordFall extends Node2D:
+	var duration := 0.45
+	var _t := 0.0
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= duration:
+			queue_free()
+			return
+		queue_redraw()
+
+	func _draw() -> void:
+		var k := _t / duration
+		var y := lerpf(-900.0, -40.0, k * k)
+		var gold := Color(1.0, 0.85, 0.4)
+		draw_line(Vector2(0, y - 260), Vector2(0, y), Color(1, 0.9, 0.5, 0.25), 60.0)
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(-22, y - 220), Vector2(22, y - 220), Vector2(16, y - 20), Vector2(0, y + 30), Vector2(-16, y - 20)]),
+			Color(0.95, 0.95, 1.0))
+		draw_line(Vector2(0, y - 210), Vector2(0, y), Color(0.75, 0.75, 0.85), 4.0)
+		draw_rect(Rect2(-70, y - 240, 140, 22), gold)
+		draw_rect(Rect2(-12, y - 330, 24, 92), Color(0.55, 0.1, 0.12))
+		draw_circle(Vector2(0, y - 340), 18.0, gold)

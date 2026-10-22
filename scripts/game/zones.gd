@@ -1,0 +1,139 @@
+extends RefCounted
+## Lingering ground effects created by hero skills. Each frees itself.
+
+
+## Mage: pulls monsters toward its centre and damages them.
+class GravityWell extends Node2D:
+	var world: Node
+	var radius := 190.0
+	var duration := 3.0
+	var dmg_mult := 0.6
+	var _t := 0.0
+	var _tick := 0.0
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= duration:
+			world.spawn_ring(global_position, radius, Color(0.55, 0.6, 1.0), 0.35)
+			queue_free()
+			return
+		_tick -= delta
+		var hit_now := _tick <= 0.0
+		if hit_now:
+			_tick = 0.5
+		for e in world.enemies_in_radius(global_position, radius):
+			var to: Vector2 = global_position - e.global_position
+			e.add_pull(to.normalized() * minf(320.0, to.length() * 4.0))
+			if hit_now:
+				world.player_hit_enemy(e, dmg_mult, Vector2.ZERO)
+		queue_redraw()
+
+	func _draw() -> void:
+		var fade := clampf((duration - _t) / 0.4, 0.0, 1.0) * clampf(_t / 0.2, 0.0, 1.0)
+		draw_circle(Vector2.ZERO, radius, Color(0.25, 0.3, 0.9, 0.12 * fade))
+		for i in 4:
+			var pts := PackedVector2Array()
+			for k in 24:
+				var f := float(k) / 23.0
+				var a := _t * 5.0 + i * TAU / 4.0 + f * 4.0
+				pts.append(Vector2.from_angle(a) * radius * (1.0 - f * 0.9))
+			draw_polyline(pts, Color(0.6, 0.7, 1.0, 0.5 * fade), 3.0, true)
+		draw_circle(Vector2.ZERO, 16.0, Color(0.05, 0.05, 0.2, 0.9 * fade))
+		draw_arc(Vector2.ZERO, 18.0, 0, TAU, 24, Color(0.8, 0.85, 1.0, fade), 3.0, true)
+
+
+## Ranger: arrows rain on an area, damaging and slowing everything inside.
+class ArrowRain extends Node2D:
+	var world: Node
+	var radius := 220.0
+	var duration := 4.0
+	var dmg_mult := 0.55
+	var _t := 0.0
+	var _tick := 0.0
+	var _streaks: Array = []
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= duration:
+			queue_free()
+			return
+		_tick -= delta
+		if _tick <= 0.0:
+			_tick = 0.25
+			Audio.play("arrow", -10.0, 0.2)
+			for e in world.enemies_in_radius(global_position, radius):
+				world.player_hit_enemy(e, dmg_mult, Vector2.ZERO)
+				e.apply_slow(0.5, 0.5)
+		# Falling arrow streaks for the visual.
+		for i in 3:
+			var p := Vector2.from_angle(randf() * TAU) * radius * sqrt(randf())
+			_streaks.append({"p": p, "t": 0.0})
+		for s in _streaks:
+			s.t += delta
+		_streaks = _streaks.filter(func(s) -> bool: return s.t < 0.18)
+		queue_redraw()
+
+	func _draw() -> void:
+		var fade := clampf((duration - _t) / 0.4, 0.0, 1.0)
+		draw_circle(Vector2.ZERO, radius, Color(0.4, 0.7, 0.3, 0.1 * fade))
+		draw_arc(Vector2.ZERO, radius, 0, TAU, 64, Color(0.6, 0.9, 0.4, 0.6 * fade), 3.0, true)
+		for s in _streaks:
+			var k: float = s.t / 0.18
+			var head: Vector2 = s.p + Vector2(-30, -160) * (1.0 - k)
+			draw_line(head + Vector2(-8, -40), head, Color(0.85, 0.8, 0.6, 0.8 * fade), 2.0, true)
+			if k > 0.85:
+				draw_circle(s.p, 5.0, Color(0.9, 0.9, 0.7, 0.6 * fade))
+
+
+## Ranger: snare left behind by the vault; roots monsters standing in it.
+class Snare extends Node2D:
+	var world: Node
+	var radius := 130.0
+	var duration := 2.6
+	var _t := 0.0
+
+	func _ready() -> void:
+		for e in world.enemies_in_radius(global_position, radius):
+			world.player_hit_enemy(e, 1.0, Vector2.ZERO)
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= duration:
+			queue_free()
+			return
+		for e in world.enemies_in_radius(global_position, radius):
+			e.apply_root(0.25)
+		queue_redraw()
+
+	func _draw() -> void:
+		var fade := clampf((duration - _t) / 0.4, 0.0, 1.0)
+		draw_circle(Vector2.ZERO, radius, Color(0.3, 0.5, 0.2, 0.15 * fade))
+		draw_arc(Vector2.ZERO, radius, 0, TAU, 48, Color(0.55, 0.85, 0.35, 0.8 * fade), 3.0, true)
+		for i in 10:
+			var a := TAU * i / 10.0 + _t * 0.5
+			var base := Vector2.from_angle(a) * radius * 0.75
+			draw_line(base, base + Vector2.from_angle(a + PI * 0.6) * 26.0, Color(0.5, 0.75, 0.3, 0.9 * fade), 3.0, true)
+
+
+## Rogue: smoke cloud around the hero while they are hidden.
+class Smoke extends Node2D:
+	var duration := 3.0
+	var _t := 0.0
+	var _puffs: Array = []
+
+	func _ready() -> void:
+		for i in 14:
+			_puffs.append({"p": Vector2.from_angle(randf() * TAU) * randf_range(10.0, 90.0), "r": randf_range(30.0, 60.0), "s": randf() * TAU})
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= duration:
+			queue_free()
+			return
+		queue_redraw()
+
+	func _draw() -> void:
+		var fade := clampf((duration - _t) / 0.8, 0.0, 1.0) * clampf(_t / 0.15, 0.0, 1.0)
+		for p in _puffs:
+			var drift := Vector2(sin(_t * 1.5 + p.s) * 10.0, -_t * 14.0)
+			draw_circle(p.p + drift, p.r * (1.0 + _t * 0.15), Color(0.22, 0.2, 0.24, 0.35 * fade))

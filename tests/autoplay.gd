@@ -126,8 +126,10 @@ func _drive() -> void:
 			break
 	_set_move(dir.normalized() if dir.length() > 0.05 else Vector2.ZERO)
 	Input.action_press("attack")
-	if p.skill_timer <= 0.0 and _world.enemies.size() > 3:
-		_tap("skill")
+	for slot in ["skill", "skill2", "ult"]:
+		if p.timers[slot] <= 0.0 and _world.enemies.size() > (3 if slot == "skill" else 6):
+			_tap(slot)
+			break
 	if p.dash_timer <= 0.0 and away.length() > 1.5:
 		_tap("dash")
 	if _frame % 600 == 0:
@@ -176,5 +178,5 @@ func _tap(action: String) -> void:
 
 
 func _release_all() -> void:
-	for a in ["move_left", "move_right", "move_up", "move_down", "attack", "skill", "dash"]:
+	for a in ["move_left", "move_right", "move_up", "move_down", "attack", "skill", "skill2", "ult", "dash"]:
 		Input.action_release(a)

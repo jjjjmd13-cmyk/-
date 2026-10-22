@@ -182,7 +182,9 @@ func _focus_hero(id: String) -> void:
 	_title_l.text = Game.t(d.title)
 	_desc_l.text = Game.t(d.desc)
 	_attack_l.text = "%s  |  %s" % [Game.t("label_attack"), Game.t(d.attack)]
-	_skill_l.text = "%s  |  %s" % [Game.t("label_skill"), Game.t(d.skill)]
+	_skill_l.text = "%s  |  %s\n%s  |  %s\n%s  |  %s" % [
+		Game.t("label_skill"), Game.t(d.skill), Game.t("label_skill2"), Game.t(d.skill2),
+		Game.t("label_ult"), Game.t(d.ult)]
 	var rec := Game.get_record(id)
 	_record_l.text = Game.t("record_best") % [int(rec.best_wave), int(rec.wins), int(rec.hard_wins)]
 	for i in _stat_bars.size():

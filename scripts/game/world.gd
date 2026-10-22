@@ -402,6 +402,8 @@ func damage_enemy(e: Node, amount: float, crit: bool, knock: Vector2, is_dot: bo
 func _on_enemy_died(e: Node) -> void:
 	enemies.erase(e)
 	kills += 1
+	if is_instance_valid(player):
+		player.on_kill()
 	Audio.play("enemy_die", -6.0)
 	spawn_burst(e.global_position + Vector2(0, -e.radius), Color(0.5, 0.04, 0.08), 12, 260.0)
 	if e.is_boss:
@@ -534,6 +536,10 @@ func show_damage(pos: Vector2, amount: float, col: Color, big: bool) -> void:
 	d.color = col
 	d.font_size = 34 if big else 24
 	_top.add_child(d)
+
+
+func player_hidden() -> bool:
+	return is_instance_valid(player) and player.is_hidden()
 
 
 func nearest_enemy(pos: Vector2, max_dist: float) -> Node2D:

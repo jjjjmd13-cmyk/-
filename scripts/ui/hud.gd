@@ -106,8 +106,13 @@ class HudCanvas extends Control:
 
 		# ---- Cooldowns (bottom-centre).
 		var by := size_v.y - 90
-		_cooldown(Vector2(cx - 70, by), Game.t("hud_skill"), 1.0 - p.skill_timer / p.skill_cd, accent)
-		_cooldown(Vector2(cx + 70, by), Game.t("hud_dash"), 1.0 - p.dash_timer / p.dash_cd, Color(0.8, 0.8, 0.85))
+		var pre := "pad_" if Input.get_connected_joypads().size() > 0 else "key_"
+		_cooldown(Vector2(cx - 210, by), Game.t(pre + "skill"), p.cooldown_ready("skill"), accent)
+		_cooldown(Vector2(cx - 70, by), Game.t(pre + "skill2"), p.cooldown_ready("skill2"), accent)
+		_cooldown(Vector2(cx + 70, by), Game.t(pre + "ult"), p.cooldown_ready("ult"), Game.COLOR_GOLD)
+		if p.cooldown_ready("ult") >= 1.0:
+			draw_arc(Vector2(cx + 70, by), 48.0 + 3.0 * sin(banner_t * 6.0), 0, TAU, 48, Color(1, 0.85, 0.4, 0.8), 3.0, true)
+		_cooldown(Vector2(cx + 210, by), Game.t(pre + "dash"), 1.0 - p.dash_timer / p.dash_cd, Color(0.8, 0.8, 0.85))
 
 		# ---- Banner.
 		if banner_t < banner_len:

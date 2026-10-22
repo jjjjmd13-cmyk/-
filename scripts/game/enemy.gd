@@ -42,6 +42,11 @@ var is_boss := false
 
 var knockback := Vector2.ZERO
 var stun := 0.0
+var slow_t := 0.0
+var slow_mult := 1.0
+var root_t := 0.0
+## Outside pull applied this frame (e.g. a gravity well).
+var _ext_pull := Vector2.ZERO
 var contact_cd := 0.0
 var bleed_dps := 0.0
 var bleed_time := 0.0
@@ -132,19 +137,30 @@ func _physics_process(delta: float) -> void:
 		dist = to_player.length()
 
 	var desired := Vector2.ZERO
+	var hidden: bool = not is_boss and world.player_hidden()
 	if stun > 0.0:
 		stun -= delta
+	elif hidden:
+		# The hero vanished in smoke: wander aimlessly instead of chasing.
+		desired = Vector2.from_angle(_wobble_seed + _anim * 0.7) * speed * 0.35
 	elif dist < 99999.0:
 		desired = _think(to_player, dist, delta)
+	if slow_t > 0.0:
+		slow_t -= delta
+		desired *= slow_mult
+	if root_t > 0.0:
+		root_t -= delta
+		desired = Vector2.ZERO
 
-	velocity = desired + knockback
+	velocity = desired + knockback + _ext_pull
+	_ext_pull = Vector2.ZERO
 	knockback = knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
 	move_and_slide()
 
 	if not is_instance_valid(player) or player.dead:
 		return
 	# Contact damage.
-	var touch := _contact_damage()
+	var touch := 0.0 if hidden else _contact_damage()
 	if touch > 0.0 and dist < radius + 20.0 and contact_cd <= 0.0 and stun <= 0.0:
 		contact_cd = 0.9
 		player.take_damage(touch, self)
@@ -345,6 +361,24 @@ func hit(amount: float, knock: Vector2) -> float:
 
 func _scale_knockback(knock: Vector2) -> Vector2:
 	return knock
+
+
+func apply_slow(mult: float, duration: float) -> void:
+	# Bosses shrug off half of any slow.
+	if is_boss:
+		mult = lerpf(mult, 1.0, 0.5)
+	slow_mult = minf(slow_mult, mult) if slow_t > 0.0 else mult
+	slow_t = maxf(slow_t, duration)
+
+
+func apply_root(duration: float) -> void:
+	if not is_boss:
+		root_t = maxf(root_t, duration)
+
+
+func add_pull(v: Vector2) -> void:
+	if not is_boss:
+		_ext_pull += v
 
 
 func apply_bleed(dps: float) -> void:
