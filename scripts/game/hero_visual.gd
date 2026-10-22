@@ -29,6 +29,7 @@ const PALETTES := {
 	},
 }
 const OUTLINE := Color(0.05, 0.03, 0.03, 0.9)
+const SpriteSet := preload("res://scripts/game/sprite_set.gd")
 
 var hero_id := "knight"
 var facing := 1.0
@@ -44,19 +45,56 @@ var invuln_blink := false
 var time := 0.0
 ## Colour of the ring under the hero's feet that keeps them visible in crowds.
 var ring_color := Color(0, 0, 0, 0)
+## Which one-shot animation the current attack_t refers to: "attack" or "skill".
+var action_anim := "attack"
+## Seconds the current attack animation should last (sprite art is retimed to fit).
+var action_len := 0.25
+var dead := false
 
 var _p: Dictionary
+## Sprite-sheet art, when the hero has some (otherwise the hero is drawn in code).
+var _sprite: AnimatedSprite2D
+var _last_attack_t := -1.0
 
 
 func _ready() -> void:
 	_p = PALETTES[hero_id]
+	_sprite = SpriteSet.make_sprite("heroes", hero_id)
+	if _sprite:
+		add_child(_sprite)
+
+
+func has_sprite() -> bool:
+	return _sprite != null
 
 
 func _process(delta: float) -> void:
 	time += delta
 	if moving:
 		walk_phase += delta * 11.0
+	if _sprite:
+		_update_sprite()
 	queue_redraw()
+
+
+func _update_sprite() -> void:
+	_sprite.flip_h = facing < 0.0
+	_sprite.material = Game.flash_material() if flash > 0.35 else null
+	if dead:
+		SpriteSet.play(_sprite, "death")
+		return
+	if dashing:
+		SpriteSet.play(_sprite, "dash")
+	elif attack_t >= 0.0:
+		# A new swing restarts the animation even if the previous one was still playing.
+		if attack_t < _last_attack_t or _last_attack_t < 0.0:
+			_sprite.stop()
+		SpriteSet.play(_sprite, action_anim, action_len)
+	elif moving:
+		SpriteSet.play(_sprite, "run")
+	else:
+		SpriteSet.play(_sprite, "idle")
+	_last_attack_t = attack_t
 
 
 func _c(col: Color) -> Color:
@@ -80,6 +118,8 @@ func _draw() -> void:
 		var pulse := 0.75 + 0.25 * sin(time * 4.0)
 		draw_arc(Vector2.ZERO, 34.0, 0, TAU, 40, Color(ring_color.r, ring_color.g, ring_color.b, 0.85 * pulse), 4.0, true)
 	draw_set_transform(Vector2.ZERO)
+	if _sprite:
+		return
 
 	var aim_dir := Vector2.from_angle(aim_angle)
 	# Weapons held "behind" the body when aiming upward.

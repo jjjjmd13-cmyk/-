@@ -4,6 +4,9 @@ extends CharacterBody2D
 signal died(enemy)
 
 const FX := preload("res://scripts/game/fx.gd")
+const SpriteSet := preload("res://scripts/game/sprite_set.gd")
+## States during which sprite art plays its attack / cast animation.
+const ACTION_STATES := ["windup", "charge", "fuse", "fade", "appear", "wind", "cast", "blink", "charging"]
 
 const KINDS := {
 	"ghoul": {"hp": 30.0, "speed": 108.0, "damage": 10.0, "radius": 17.0, "xp": 1},
@@ -95,6 +98,12 @@ func _ready() -> void:
 	_visual = Visual.new()
 	_visual.enemy = self
 	add_child(_visual)
+	var sprite := SpriteSet.make_sprite("bosses" if is_boss else "enemies", kind)
+	if sprite:
+		if elite:
+			sprite.scale *= 1.3
+		_visual.sprite = sprite
+		_visual.add_child(sprite)
 
 
 func _physics_process(delta: float) -> void:
@@ -368,10 +377,22 @@ func redraws_every_frame() -> bool:
 ## Draws the enemy. Static kinds draw once and animate via transform.
 class Visual extends Node2D:
 	var enemy: Node
+	## Sprite-sheet art, when this kind has some (otherwise drawn in code).
+	var sprite: AnimatedSprite2D
 
 	func _process(_delta: float) -> void:
 		var e = enemy
-		if e.redraws_every_frame():
+		if sprite:
+			var action: bool = ACTION_STATES.has(e._state)
+			if e._state == "intro":
+				SpriteSet.play(sprite, "idle")
+			elif action:
+				SpriteSet.play(sprite, "cast" if e.is_boss else "attack")
+			else:
+				SpriteSet.play(sprite, "run")
+			if e.elite:
+				queue_redraw()
+		elif e.redraws_every_frame():
 			queue_redraw()
 		# Cheap walk animation: bob and sway.
 		var t: float = e._anim * 9.0 + e._wobble_seed
@@ -386,6 +407,13 @@ class Visual extends Node2D:
 
 	func _draw() -> void:
 		var e = enemy
+		if sprite:
+			draw_set_transform(Vector2(0, -position.y), 0.0, Vector2(1, 0.35))
+			draw_circle(Vector2.ZERO, e.radius * 1.1, Color(0, 0, 0, 0.35))
+			if e.elite:
+				_elite_sigil(e.radius * 1.45, e._anim)
+			draw_set_transform(Vector2.ZERO)
+			return
 		if e.is_boss:
 			e.draw_body(self)
 			return

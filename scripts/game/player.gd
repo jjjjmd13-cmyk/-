@@ -150,6 +150,8 @@ func _physics_process(delta: float) -> void:
 		if _attack_anim >= 1.0:
 			_attack_anim = -1.0
 	_visual.attack_t = _attack_anim
+	_visual.action_len = _attack_anim_len
+	_visual.dashing = _dash_t > 0.0
 	_visual.aim_angle = aim_dir.angle()
 	_visual.moving = velocity.length() > 10.0
 	_visual.invuln_blink = _invuln > 0.0 and _dash_t <= 0.0
@@ -196,6 +198,7 @@ func _attack() -> void:
 	var speed_cd := attack_cd
 	attack_timer = speed_cd
 	_attack_anim = 0.0
+	_visual.action_anim = "attack"
 	_attack_anim_len = clampf(speed_cd * 0.85, 0.12, 0.4)
 	var origin := global_position + Vector2(0, -40)
 	match data.attack_kind:
@@ -269,6 +272,7 @@ func _fire(kind: String, origin: Vector2, dir: Vector2, spd: float, mult: float,
 func _skill() -> void:
 	skill_timer = skill_cd
 	_attack_anim = 0.0
+	_visual.action_anim = "skill"
 	_attack_anim_len = 0.3
 	var origin := global_position + Vector2(0, -40)
 	match hero_id:
@@ -372,8 +376,10 @@ func take_damage(amount: float, source: Node) -> bool:
 		hp = 0.0
 		dead = true
 		_visual.flash = 0.0
-		_visual.modulate = Color(0.6, 0.3, 0.3, 0.8)
-		_visual.rotation = deg_to_rad(80.0 * _visual.facing)
+		_visual.dead = true
+		if not _visual.has_sprite() or _visual.SpriteSet.resolve(_visual._sprite, "death") == "":
+			_visual.modulate = Color(0.6, 0.3, 0.3, 0.8)
+			_visual.rotation = deg_to_rad(80.0 * _visual.facing)
 		died.emit()
 	return true
 
