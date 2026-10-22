@@ -395,8 +395,9 @@ class Visual extends Node2D:
 	func _bat(t: float) -> void:
 		var flap := sin(t * 18.0) * 10.0
 		var wing := Color(0.22, 0.12, 0.18)
-		_poly([Vector2(0, -36), Vector2(-26, -44 - flap), Vector2(-20, -32), Vector2(-12, -34 + flap * 0.2), Vector2(-4, -28)], wing)
-		_poly([Vector2(0, -36), Vector2(26, -44 - flap), Vector2(20, -32), Vector2(12, -34 + flap * 0.2), Vector2(4, -28)], wing)
+		# Kept convex-ish for every flap value so the polygon always triangulates.
+		_poly([Vector2(0, -36), Vector2(-26, -44 - flap), Vector2(-14, -30 - flap * 0.3), Vector2(-4, -28)], wing)
+		_poly([Vector2(0, -36), Vector2(4, -28), Vector2(14, -30 - flap * 0.3), Vector2(26, -44 - flap)], wing)
 		draw_circle(Vector2(0, -34), 8.0, Color(0.3, 0.16, 0.22))
 		draw_circle(Vector2(3, -36), 2.0, Color(1, 0.2, 0.2))
 		draw_circle(Vector2(-3, -36), 2.0, Color(1, 0.2, 0.2))
