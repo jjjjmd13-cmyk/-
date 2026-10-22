@@ -5,6 +5,7 @@ signal exit_requested(target: String)
 
 const Player := preload("res://scripts/game/player.gd")
 const Enemy := preload("res://scripts/game/enemy.gd")
+const Boss := preload("res://scripts/game/boss.gd")
 const Projectile := preload("res://scripts/game/projectile.gd")
 const EnemyProjectile := preload("res://scripts/game/enemy_projectile.gd")
 const Pickup := preload("res://scripts/game/pickup.gd")
@@ -233,7 +234,7 @@ func _start_wave(n: int) -> void:
 	wave_duration = 30.0 + wave * 1.5
 	_spawn_t = 0.5
 	if is_boss_wave(wave):
-		_hud.show_banner(Game.t("wave_banner") % wave, Game.t("boss_banner"))
+		_hud.show_banner(Game.t("wave_banner") % wave, Game.t("boss_banner_" + boss_kind_for_wave(wave)))
 		Audio.play("boss_roar")
 		Audio.play_music("boss")
 		_spawn_boss()
@@ -279,7 +280,7 @@ func _spawn_group() -> void:
 			break
 		var kind := _pick_kind()
 		var pos := center + Vector2(rng.randf_range(-60, 60), rng.randf_range(-60, 60))
-		var elite := wave >= 6 and rng.randf() < 0.035 and kind != "bat"
+		var elite := wave >= 6 and rng.randf() < 0.035
 		spawn_enemy_at(kind, pos, elite)
 
 
@@ -294,6 +295,14 @@ func _pick_kind() -> String:
 		table["brute"] = 0.8 + w * 0.22
 	if wave >= 6:
 		table["cultist"] = 1.5 + w * 0.2
+	if wave >= 7:
+		table["wraith"] = 1.5 + w * 0.15
+	if wave >= 9:
+		table["bomber"] = 1.2 + w * 0.12
+	if wave >= 11:
+		table["shield"] = 1.0 + w * 0.1
+	if wave >= 13:
+		table["necro"] = 0.5 + w * 0.05
 	var total := 0.0
 	for k in table:
 		total += table[k]
@@ -319,8 +328,18 @@ func _random_spawn_point() -> Vector2:
 	return best
 
 
+func clamp_to_arena(p: Vector2) -> Vector2:
+	var inner := ARENA.grow(-60)
+	return Vector2(clampf(p.x, inner.position.x, inner.end.x), clampf(p.y, inner.position.y, inner.end.y))
+
+
+func boss_kind_for_wave(w: int) -> String:
+	## Dread Knight, Blood Witch, Void Sovereign, then repeating in endless mode.
+	return Boss.ORDER[(maxi(w / BOSS_EVERY, 1) - 1) % Boss.ORDER.size()]
+
+
 func spawn_enemy_at(kind: String, pos: Vector2, elite: bool = false) -> Node2D:
-	var e := Enemy.new()
+	var e: Node2D = Boss.new() if Boss.BOSSES.has(kind) else Enemy.new()
 	e.setup(kind, self, _hp_mult(), _dmg_mult(), elite)
 	var inner := ARENA.grow(-40)
 	e.position = Vector2(clampf(pos.x, inner.position.x, inner.end.x), clampf(pos.y, inner.position.y, inner.end.y))
@@ -332,13 +351,14 @@ func spawn_enemy_at(kind: String, pos: Vector2, elite: bool = false) -> Node2D:
 
 
 func _spawn_boss() -> void:
-	var pos: Vector2 = player.global_position + Vector2(0, -520)
+	var pos: Vector2 = player.global_position + Vector2(0, -340)
 	if not ARENA.grow(-150).has_point(pos):
-		pos = player.global_position + Vector2(0, 520)
-	boss = spawn_enemy_at("boss", pos)
+		pos = player.global_position + Vector2(0, 340)
+	var kind := boss_kind_for_wave(wave)
+	boss = spawn_enemy_at(kind, pos)
 	# Bosses scale less steeply than the horde so fights stay reasonable.
 	var mult := 1.0 + 0.6 * float(wave / BOSS_EVERY - 1)
-	boss.max_hp = Enemy.KINDS.boss.hp * mult * (1.0 + 0.05 * wave) * float(Game.DIFFICULTY[Game.difficulty].hp)
+	boss.max_hp = Boss.BOSSES[kind].hp * mult * (1.0 + 0.05 * wave) * float(Game.DIFFICULTY[Game.difficulty].hp)
 	boss.hp = boss.max_hp
 	shake(10.0)
 
@@ -348,19 +368,26 @@ func player_hit_enemy(e: Node, mult: float, knock: Vector2) -> void:
 	if e.dead or not is_instance_valid(player):
 		return
 	var roll: Array = player.roll_damage(mult)
-	damage_enemy(e, roll[0], roll[1], knock)
+	var dealt := damage_enemy(e, roll[0], roll[1], knock)
 	if player.lifesteal > 0.0:
-		player.heal(roll[0] * player.lifesteal, false)
+		player.heal(dealt * player.lifesteal, false)
 	if player.venom > 0:
 		e.apply_bleed(player.damage * 0.25 * player.venom)
 
 
-func damage_enemy(e: Node, amount: float, crit: bool, knock: Vector2, is_dot: bool = false) -> void:
+func damage_enemy(e: Node, amount: float, crit: bool, knock: Vector2, is_dot: bool = false) -> float:
+	## Returns the damage actually dealt (shields can block part of it).
 	if e.dead:
-		return
-	e.hit(amount, knock)
+		return 0.0
+	var blocked: bool = false
+	var dealt: float = e.hit(amount, knock)
+	if dealt < amount * 0.99:
+		blocked = true
+		amount = dealt
 	if Game.settings.damage_numbers:
 		var col := Color(1, 0.85, 0.3) if crit else (Color(0.7, 1, 0.5) if is_dot else Color.WHITE)
+		if blocked:
+			col = Color(0.6, 0.62, 0.7)
 		show_damage(e.global_position + Vector2(0, -e.radius * 2.0 - 20.0), amount, col, crit)
 	if not is_dot:
 		Audio.play("crit" if crit else "hit", -4.0 if not crit else 0.0)
@@ -369,6 +396,7 @@ func damage_enemy(e: Node, amount: float, crit: bool, knock: Vector2, is_dot: bo
 		shake(3.0)
 	if e.hp <= 0.0:
 		e.die()
+	return dealt
 
 
 func _on_enemy_died(e: Node) -> void:
@@ -376,7 +404,7 @@ func _on_enemy_died(e: Node) -> void:
 	kills += 1
 	Audio.play("enemy_die", -6.0)
 	spawn_burst(e.global_position + Vector2(0, -e.radius), Color(0.5, 0.04, 0.08), 12, 260.0)
-	if e.kind == "boss":
+	if e.is_boss:
 		_on_boss_killed(e)
 		return
 	drop_xp(e.global_position, e.xp)
@@ -409,6 +437,8 @@ func _on_boss_killed(e: Node) -> void:
 
 
 func drop_xp(pos: Vector2, value: int) -> void:
+	if value <= 0:
+		return
 	if get_tree().get_node_count_in_group("pickups") >= MAX_PICKUPS:
 		# Merge into an existing shard instead of creating more nodes.
 		for c in _ground.get_children():

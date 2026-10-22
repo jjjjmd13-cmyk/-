@@ -1,5 +1,5 @@
 extends CharacterBody2D
-## All regular enemies plus the Dread Knight boss, configured by `kind`.
+## Regular enemies, configured by `kind`. Bosses extend this in boss.gd.
 
 signal died(enemy)
 
@@ -13,8 +13,17 @@ const KINDS := {
 	"brute": {"hp": 135.0, "speed": 72.0, "damage": 20.0, "radius": 27.0, "xp": 6},
 	"cultist": {"hp": 44.0, "speed": 82.0, "damage": 12.0, "radius": 17.0, "xp": 3,
 		"range": 440.0, "shot_cd": 3.2},
-	"boss": {"hp": 1500.0, "speed": 100.0, "damage": 24.0, "radius": 46.0, "xp": 80},
+	"wraith": {"hp": 36.0, "speed": 100.0, "damage": 12.0, "radius": 16.0, "xp": 3},
+	"bomber": {"hp": 42.0, "speed": 118.0, "damage": 26.0, "radius": 18.0, "xp": 3},
+	"shield": {"hp": 95.0, "speed": 78.0, "damage": 16.0, "radius": 22.0, "xp": 5},
+	"necro": {"hp": 62.0, "speed": 72.0, "damage": 10.0, "radius": 18.0, "xp": 6,
+		"range": 480.0},
+	"skeleton": {"hp": 18.0, "speed": 122.0, "damage": 8.0, "radius": 14.0, "xp": 0},
 }
+
+## Damage from the front is reduced by this much for shield bearers.
+const SHIELD_BLOCK := 0.65
+const BOMB_RADIUS := 115.0
 
 var kind := "ghoul"
 var world: Node
@@ -26,6 +35,7 @@ var radius := 16.0
 var xp := 1
 var elite := false
 var dead := false
+var is_boss := false
 
 var knockback := Vector2.ZERO
 var stun := 0.0
@@ -39,27 +49,37 @@ var _anim := 0.0
 var _wobble_seed := 0.0
 var _visual: Node2D
 
-# Brute charge / boss state machine.
+# Shared state machine for brutes, wraiths, bombers, necromancers and bosses.
 var _state := "chase"
 var _state_t := 0.0
 var _charge_dir := Vector2.ZERO
-var _boss_phase := 1
-var _boss_cycle := 0
+## Direction the shield bearer is facing (turns slowly so it can be flanked).
+var _facing := Vector2.RIGHT
+var _fuse_tel: Node2D
+var _minions: Array = []
+
+
+func _stats() -> Dictionary:
+	return KINDS[kind]
 
 
 func setup(p_kind: String, p_world: Node, hp_mult: float, dmg_mult: float, p_elite: bool) -> void:
 	kind = p_kind
 	world = p_world
 	elite = p_elite
-	var d: Dictionary = KINDS[kind]
+	var d: Dictionary = _stats()
 	max_hp = d.hp * hp_mult * (3.2 if elite else 1.0)
 	hp = max_hp
 	speed = d.speed * randf_range(0.92, 1.08) * (1.1 if elite else 1.0)
 	damage = d.damage * dmg_mult * (1.4 if elite else 1.0)
 	radius = d.radius * (1.3 if elite else 1.0)
 	xp = int(d.xp) * (5 if elite else 1)
-	_shot_cd = randf_range(0.8, float(d.get("shot_cd", 1.0)))
+	_shot_cd = randf_range(0.8, float(d.get("shot_cd", 2.0)))
 	_wobble_seed = randf() * TAU
+	if kind == "wraith":
+		_state_t = randf_range(2.0, 4.0)
+	elif kind == "necro":
+		_state_t = randf_range(1.5, 3.0)
 
 
 func _ready() -> void:
@@ -75,9 +95,6 @@ func _ready() -> void:
 	_visual = Visual.new()
 	_visual.enemy = self
 	add_child(_visual)
-	if kind == "boss":
-		_state = "intro"
-		_state_t = 1.2
 
 
 func _physics_process(delta: float) -> void:
@@ -109,18 +126,7 @@ func _physics_process(delta: float) -> void:
 	if stun > 0.0:
 		stun -= delta
 	elif dist < 99999.0:
-		match kind:
-			"archer", "cultist":
-				desired = _ranged_ai(to_player, dist, delta)
-			"brute":
-				desired = _brute_ai(to_player, dist, delta)
-			"boss":
-				desired = _boss_ai(to_player, dist, delta)
-			"bat":
-				var side := to_player.orthogonal().normalized() * sin(_anim * 5.0 + _wobble_seed) * 0.7
-				desired = (to_player.normalized() + side).normalized() * speed
-			_:
-				desired = to_player.normalized() * speed
+		desired = _think(to_player, dist, delta)
 
 	velocity = desired + knockback
 	knockback = knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
@@ -129,17 +135,48 @@ func _physics_process(delta: float) -> void:
 	if not is_instance_valid(player) or player.dead:
 		return
 	# Contact damage.
-	if dist < radius + 20.0 and contact_cd <= 0.0 and stun <= 0.0:
+	var touch := _contact_damage()
+	if touch > 0.0 and dist < radius + 20.0 and contact_cd <= 0.0 and stun <= 0.0:
 		contact_cd = 0.9
-		# The boss's real threats are its telegraphed attacks; touching it hurts less.
-		player.take_damage(damage * (0.55 if kind == "boss" else 1.0), self)
+		player.take_damage(touch, self)
 
-	if absf(to_player.x) > 4.0:
+	if absf(to_player.x) > 4.0 and kind != "shield":
 		_visual.scale.x = signf(to_player.x)
 
 
+## Damage dealt by touching the player (0 = harmless to touch).
+func _contact_damage() -> float:
+	match kind:
+		"bomber":
+			return 0.0
+		"wraith":
+			return damage if _state == "chase" else 0.0
+	return damage
+
+
+## Returns the desired velocity for this frame.
+func _think(to_player: Vector2, dist: float, delta: float) -> Vector2:
+	match kind:
+		"archer", "cultist":
+			return _ranged_ai(to_player, dist, delta)
+		"brute":
+			return _brute_ai(to_player, dist, delta)
+		"bat":
+			var side := to_player.orthogonal().normalized() * sin(_anim * 5.0 + _wobble_seed) * 0.7
+			return (to_player.normalized() + side).normalized() * speed
+		"wraith":
+			return _wraith_ai(to_player, dist, delta)
+		"bomber":
+			return _bomber_ai(to_player, dist, delta)
+		"shield":
+			return _shield_ai(to_player, dist, delta)
+		"necro":
+			return _necro_ai(to_player, dist, delta)
+	return to_player.normalized() * speed
+
+
 func _ranged_ai(to_player: Vector2, dist: float, delta: float) -> Vector2:
-	var d: Dictionary = KINDS[kind]
+	var d: Dictionary = _stats()
 	var dir := to_player / maxf(dist, 1.0)
 	_shot_cd -= delta
 	if _shot_cd <= 0.0 and dist < d.range + 80.0:
@@ -148,11 +185,15 @@ func _ranged_ai(to_player: Vector2, dist: float, delta: float) -> Vector2:
 			world.spawn_enemy_projectile(global_position + Vector2(0, -30), dir * 330.0, damage, "arrow")
 		else:
 			world.spawn_enemy_projectile(global_position + Vector2(0, -40), dir * 210.0, damage, "orb")
+	return _keep_range(dir, dist, d.range)
+
+
+func _keep_range(dir: Vector2, dist: float, preferred: float) -> Vector2:
 	# Keep at preferred range, strafing slightly.
 	var strafe := dir.orthogonal() * sin(_anim * 0.8 + _wobble_seed) * 0.5
-	if dist > d.range:
+	if dist > preferred:
 		return (dir + strafe * 0.3).normalized() * speed
-	elif dist < d.range * 0.6:
+	elif dist < preferred * 0.6:
 		return (-dir + strafe).normalized() * speed * 0.8
 	return strafe * speed
 
@@ -185,131 +226,116 @@ func _brute_ai(to_player: Vector2, dist: float, delta: float) -> Vector2:
 	return to_player.normalized() * speed
 
 
-func _boss_ai(to_player: Vector2, dist: float, delta: float) -> Vector2:
-	if _boss_phase == 1 and hp < max_hp * 0.5:
-		_boss_phase = 2
-		Audio.play("boss_roar")
-		world.shake(14.0)
-		world.spawn_ring(global_position, 240.0, Color(0.7, 0.1, 0.15), 0.6)
-	var fast := 1.35 if _boss_phase == 2 else 1.0
-	var dir := to_player / maxf(dist, 1.0)
-	_state_t -= delta * fast
+func _wraith_ai(to_player: Vector2, dist: float, delta: float) -> Vector2:
+	## Drifts toward the player, periodically vanishing and reappearing beside them.
+	_state_t -= delta
 	match _state:
-		"intro":
+		"fade":
+			_visual.modulate.a = clampf(_state_t / 0.45, 0.0, 1.0) * 0.8
+			if _state_t <= 0.0:
+				var player: Node2D = world.player
+				var spot: Vector2 = player.global_position + Vector2.from_angle(randf() * TAU) * randf_range(130.0, 190.0)
+				global_position = world.clamp_to_arena(spot)
+				world.spawn_burst(global_position + Vector2(0, -30), Color(0.6, 0.75, 1.0), 10, 160.0)
+				_state = "appear"
+				_state_t = 0.45
+			return Vector2.ZERO
+		"appear":
+			_visual.modulate.a = (1.0 - clampf(_state_t / 0.45, 0.0, 1.0)) * 0.8
 			if _state_t <= 0.0:
 				_state = "chase"
-				_state_t = 1.5
+				_state_t = randf_range(3.5, 5.0)
 			return Vector2.ZERO
-		"chase":
-			if _state_t <= 0.0:
-				_pick_boss_attack(to_player, dist)
-			return dir * speed * fast
-		"slam_wind":
-			if _state_t <= 0.0:
-				_state = "recover"
-				_state_t = 0.7
-			return Vector2.ZERO
-		"charge_wind":
-			if _state_t <= 0.0:
-				_state = "charging"
-				_state_t = 0.6
-				Audio.play("dash", 2.0, 0.0)
-			return Vector2.ZERO
-		"charging":
-			if _state_t <= 0.0:
-				_state = "recover"
-				_state_t = 0.6
-			return _charge_dir * 820.0
-		"burst":
-			if _state_t <= 0.0:
-				_state = "recover"
-				_state_t = 0.5
-			return Vector2.ZERO
-		"recover":
-			if _state_t <= 0.0:
-				_state = "chase"
-				_state_t = randf_range(1.4, 2.2)
-			return dir * speed * 0.4
-	return Vector2.ZERO
+	if _state_t <= 0.0 and dist > 160.0:
+		_state = "fade"
+		_state_t = 0.45
+		return Vector2.ZERO
+	var drift := to_player.orthogonal().normalized() * sin(_anim * 2.0 + _wobble_seed) * 0.4
+	return (to_player.normalized() + drift).normalized() * speed
 
 
-func _pick_boss_attack(to_player: Vector2, dist: float) -> void:
-	_boss_cycle += 1
-	var options := ["slam", "burst", "charge"]
-	if _boss_phase == 2 and _boss_cycle % 3 == 0:
-		options.append("summon")
-	var pick: String = options[randi() % options.size()]
-	if dist < 220.0 and randf() < 0.6:
-		pick = "slam"
-	match pick:
-		"slam":
-			_state = "slam_wind"
-			_state_t = 0.9
-			var tel = FX.Telegraph.new()
-			tel.radius = 210.0
-			tel.duration = 0.9 / (1.35 if _boss_phase == 2 else 1.0)
-			tel.position = global_position
-			tel.on_done = _do_slam
-			world.add_ground_fx(tel)
-		"charge":
-			_state = "charge_wind"
-			_state_t = 0.7
-			_charge_dir = to_player.normalized()
-			var tel = FX.LineTelegraph.new()
-			tel.length = 820.0 * 0.6
-			tel.width = radius * 2.2
-			tel.duration = 0.7 / (1.35 if _boss_phase == 2 else 1.0)
-			tel.rotation = _charge_dir.angle()
-			tel.position = global_position
-			world.add_ground_fx(tel)
-		"burst":
-			_state = "burst"
-			_state_t = 0.8
-			_do_burst(0.0)
-			if _boss_phase == 2:
-				get_tree().create_timer(0.35, false).timeout.connect(func() -> void:
-					if not dead:
-						_do_burst(PI / 16.0))
-		"summon":
-			_state = "recover"
-			_state_t = 0.9
-			Audio.play("boss_roar", -4.0)
-			for i in 6:
-				var p := global_position + Vector2.from_angle(TAU * i / 6.0) * 120.0
-				world.spawn_enemy_at("ghoul", p)
+func _bomber_ai(to_player: Vector2, dist: float, _delta: float) -> Vector2:
+	## Runs at the player, then stops and detonates after a visible fuse.
+	if _state == "fuse":
+		return Vector2.ZERO
+	if dist < 95.0:
+		_state = "fuse"
+		Audio.play("enemy_shot", 0.0, 0.0)
+		var tel = FX.Telegraph.new()
+		tel.radius = BOMB_RADIUS
+		tel.duration = 0.85
+		tel.position = global_position
+		tel.on_done = _explode
+		world.add_ground_fx(tel)
+		_fuse_tel = tel
+		return Vector2.ZERO
+	return to_player.normalized() * speed
 
 
-func _do_slam() -> void:
+func _explode() -> void:
 	if dead:
 		return
-	Audio.play("explosion")
-	world.shake(12.0)
-	world.spawn_ring(global_position, 210.0, Color(0.9, 0.25, 0.15), 0.4)
+	_fuse_tel = null
+	Audio.play("explosion", -2.0)
+	world.shake(9.0)
+	world.spawn_ring(global_position, BOMB_RADIUS, Color(1, 0.3, 0.15), 0.35)
+	world.spawn_burst(global_position + Vector2(0, -20), Color(0.9, 0.15, 0.1), 18, 360.0)
 	var player: Node2D = world.player
 	if is_instance_valid(player) and not player.dead:
-		if player.global_position.distance_to(global_position) < 210.0 + 14.0:
-			player.take_damage(damage * 1.5, self)
+		if player.global_position.distance_to(global_position) < BOMB_RADIUS + 14.0:
+			player.take_damage(damage, self)
+	# The blast also hurts nearby monsters.
+	for e in world.enemies_in_radius(global_position, BOMB_RADIUS):
+		if e != self and not e.is_boss:
+			world.damage_enemy(e, damage * 1.5, false, (e.global_position - global_position).normalized() * 200.0)
+	xp = 0
+	die()
 
 
-func _do_burst(offset: float) -> void:
-	Audio.play("enemy_shot", 2.0)
-	var count := 20 if _boss_phase == 2 else 16
-	for i in count:
-		var dir := Vector2.from_angle(offset + TAU * i / count)
-		world.spawn_enemy_projectile(global_position + Vector2(0, -50) + dir * 30.0, dir * 250.0, damage * 0.6, "orb_fast")
+func _shield_ai(to_player: Vector2, _dist: float, delta: float) -> Vector2:
+	var want := to_player.normalized()
+	# Turn slowly so dashing around the shield exposes its back.
+	var ang := _facing.angle()
+	ang = rotate_toward(ang, want.angle(), 1.6 * delta)
+	_facing = Vector2.from_angle(ang)
+	_visual.scale.x = 1.0 if _facing.x >= 0.0 else -1.0
+	return want * speed
 
 
-func hit(amount: float, knock: Vector2) -> void:
+func _necro_ai(to_player: Vector2, dist: float, delta: float) -> Vector2:
+	## Keeps its distance and keeps raising skeletons.
+	_state_t -= delta
+	_minions = _minions.filter(func(m) -> bool: return is_instance_valid(m) and not m.dead)
+	if _state_t <= 0.0:
+		_state_t = randf_range(4.5, 5.5)
+		if _minions.size() < 6:
+			Audio.play("magic", -6.0, 0.0)
+			for i in 2:
+				var p := global_position + Vector2.from_angle(randf() * TAU) * 60.0
+				var m: Node = world.spawn_enemy_at("skeleton", p)
+				_minions.append(m)
+	return _keep_range(to_player / maxf(dist, 1.0), dist, _stats().range)
+
+
+func hit(amount: float, knock: Vector2) -> float:
+	## Applies damage and knockback; returns the damage actually taken.
+	if kind == "shield" and knock.length() > 0.01 and knock.normalized().dot(_facing) < -0.4:
+		amount *= 1.0 - SHIELD_BLOCK
+		knock *= 0.2
+		world.spawn_burst(global_position + _facing * 26.0 + Vector2(0, -34), Color(1, 0.85, 0.5), 3, 140.0)
 	hp -= amount
-	if kind == "boss":
-		knock *= 0.05
-	elif kind == "brute":
+	if kind == "brute" or kind == "shield":
 		knock *= 0.35
 	if elite:
 		knock *= 0.5
-	knockback += knock
+	knockback += _scale_knockback(knock)
 	_flash = 0.07
 	_visual.material = Game.flash_material()
+	return amount
+
+
+func _scale_knockback(knock: Vector2) -> Vector2:
+	return knock
 
 
 func apply_bleed(dps: float) -> void:
@@ -323,8 +349,20 @@ func die() -> void:
 	if dead:
 		return
 	dead = true
+	if is_instance_valid(_fuse_tel):
+		_fuse_tel.queue_free()
 	died.emit(self)
 	queue_free()
+
+
+## Bosses draw themselves; overridden in boss.gd.
+func draw_body(_v: Node2D) -> void:
+	pass
+
+
+## True for kinds whose drawing animates every frame.
+func redraws_every_frame() -> bool:
+	return kind in ["bat", "wraith", "bomber", "necro"]
 
 
 ## Draws the enemy. Static kinds draw once and animate via transform.
@@ -333,36 +371,54 @@ class Visual extends Node2D:
 
 	func _process(_delta: float) -> void:
 		var e = enemy
-		if e.kind == "bat" or e.kind == "boss":
+		if e.redraws_every_frame():
 			queue_redraw()
 		# Cheap walk animation: bob and sway.
 		var t: float = e._anim * 9.0 + e._wobble_seed
-		if e.kind != "bat":
-			position.y = -absf(sin(t)) * 3.0
-			rotation = sin(t) * 0.06
-		else:
-			position.y = sin(t * 0.5) * 6.0
+		match e.kind:
+			"bat":
+				position.y = sin(t * 0.5) * 6.0
+			"wraith":
+				position.y = sin(t * 0.3) * 5.0 - 6.0
+			_:
+				position.y = -absf(sin(t)) * 3.0
+				rotation = sin(t) * 0.06
 
 	func _draw() -> void:
 		var e = enemy
+		if e.is_boss:
+			e.draw_body(self)
+			return
 		var r: float = e.radius
 		var s: float = r / float(KINDS[e.kind].radius)
-		# Shadow (drawn relative to feet).
-		draw_set_transform(Vector2(0, -position.y), 0.0, Vector2(1, 0.35))
-		draw_circle(Vector2.ZERO, r * 1.1, Color(0, 0, 0, 0.35))
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2(s, s))
+		# Shadow.
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 0.35))
+		draw_circle(Vector2.ZERO, r * 1.1, Color(0, 0, 0, 0.35 if e.kind != "wraith" else 0.15))
 		if e.elite:
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2(s, s * 0.35))
-			draw_arc(Vector2.ZERO, r * 1.3 / s, 0, TAU, 32, Color(1, 0.8, 0.3, 0.8), 3.0, true)
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2(s, s))
+			_elite_sigil(r * 1.45, e._anim)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2(s, s))
 		match e.kind:
 			"ghoul": _ghoul()
 			"bat": _bat(e._anim)
 			"archer": _archer()
 			"brute": _brute()
 			"cultist": _cultist()
-			"boss": _boss(e._anim, e._state)
+			"wraith": _wraith(e._anim)
+			"bomber": _bomber(e._anim, e._state == "fuse")
+			"shield": _shield()
+			"necro": _necro(e._anim)
+			"skeleton": _skeleton()
 		draw_set_transform(Vector2.ZERO)
+
+	func _elite_sigil(r: float, t: float) -> void:
+		## Golden rune circle under elites (drawn in the flattened shadow space).
+		var gold := Color(1.0, 0.78, 0.32)
+		draw_circle(Vector2.ZERO, r * 1.05, Color(1.0, 0.7, 0.2, 0.12))
+		draw_arc(Vector2.ZERO, r, 0, TAU, 40, Color(gold.r, gold.g, gold.b, 0.95), 4.0, true)
+		draw_arc(Vector2.ZERO, r * 0.78, 0, TAU, 40, Color(gold.r, gold.g, gold.b, 0.6), 2.0, true)
+		for i in 12:
+			var a := TAU * i / 12.0 + t * 0.6
+			draw_line(Vector2.from_angle(a) * r * 0.8, Vector2.from_angle(a) * r * 0.98, gold, 2.0)
 
 	func _poly(pts: Array, col: Color, outline := true) -> void:
 		var p := PackedVector2Array(pts)
@@ -445,39 +501,91 @@ class Visual extends Node2D:
 		draw_circle(Vector2(16, -32), 7.0, Color(0.9, 0.2, 0.7, 0.35))
 		draw_circle(Vector2(16, -32), 3.5, Color(1, 0.5, 0.9))
 
-	func _boss(t: float, state: String) -> void:
-		var plate := Color(0.2, 0.19, 0.22)
-		var plate_hi := Color(0.38, 0.36, 0.42)
-		var red := Color(0.75, 0.08, 0.12)
-		var sway := sin(t * 2.0) * 4.0
-		# Tattered cape.
-		_poly([Vector2(-24, -110), Vector2(20, -110), Vector2(34 + sway, -6), Vector2(18, -14),
-			Vector2(6, -2), Vector2(-8, -12), Vector2(-24, 0), Vector2(-40 + sway, -10)], Color(0.15, 0.05, 0.07))
-		# Legs.
-		_poly([Vector2(-22, 0), Vector2(-18, -48), Vector2(-4, -48), Vector2(-6, 0)], plate)
-		_poly([Vector2(6, 0), Vector2(4, -48), Vector2(18, -48), Vector2(22, 0)], plate)
-		# Torso.
-		_poly([Vector2(-30, -46), Vector2(30, -46), Vector2(36, -108), Vector2(-36, -108)], plate)
-		_poly([Vector2(-12, -60), Vector2(12, -60), Vector2(16, -100), Vector2(-16, -100)], plate_hi)
-		draw_circle(Vector2(0, -82), 7.0, red)
-		draw_circle(Vector2(0, -82), 12.0, Color(1, 0.1, 0.1, 0.25 + 0.15 * sin(t * 4.0)))
-		# Spiked pauldrons.
-		for side in [-1, 1]:
-			_poly([Vector2(26 * side, -98), Vector2(52 * side, -110), Vector2(46 * side, -88), Vector2(30 * side, -84)], plate_hi)
-			_poly([Vector2(40 * side, -106), Vector2(52 * side, -132), Vector2(48 * side, -104)], Color(0.6, 0.58, 0.6))
-		# Helm with glowing visor.
-		_poly([Vector2(-18, -108), Vector2(18, -108), Vector2(16, -140), Vector2(0, -150), Vector2(-16, -140)], plate)
-		draw_line(Vector2(-10, -128), Vector2(14, -128), Color(1, 0.15, 0.1), 4.0)
-		_poly([Vector2(-14, -142), Vector2(-26, -162), Vector2(-8, -146)], Color(0.6, 0.58, 0.6))
-		_poly([Vector2(14, -142), Vector2(26, -162), Vector2(8, -146)], Color(0.6, 0.58, 0.6))
-		# Giant cursed blade; raised during wind-ups.
-		var ang := -0.5
-		if state == "slam_wind" or state == "charge_wind":
-			ang = -1.9
-		elif state == "recover":
-			ang = 0.6
-		draw_set_transform(Vector2(34, -74), ang)
-		_poly([Vector2(0, -8), Vector2(120, -10), Vector2(140, 0), Vector2(120, 10), Vector2(0, 8)], Color(0.32, 0.3, 0.34))
-		draw_line(Vector2(6, 0), Vector2(128, 0), Color(0.9, 0.15, 0.15, 0.8), 3.0)
-		draw_line(Vector2(0, -18), Vector2(0, 18), Color(0.55, 0.1, 0.12), 8.0)
-		draw_set_transform(Vector2.ZERO)
+	func _wraith(t: float) -> void:
+		## Pale blue spirit with a wispy, flowing tail.
+		var body := Color(0.62, 0.74, 0.95, 0.55)
+		var core := Color(0.82, 0.9, 1.0, 0.75)
+		var tail := PackedVector2Array()
+		for i in 7:
+			var k := float(i) / 6.0
+			tail.append(Vector2(-12 + 24 * k + sin(t * 5.0 + k * 6.0) * 3.0, -6 - sin(PI * k) * 4.0 + absf(sin(t * 4.0 + i)) * 6.0))
+		var pts := PackedVector2Array([Vector2(-14, -40), Vector2(-9, -62), Vector2(0, -70), Vector2(10, -62), Vector2(14, -40)])
+		for i in range(tail.size() - 1, -1, -1):
+			pts.append(tail[i])
+		pts.reverse()
+		draw_colored_polygon(pts, body)
+		draw_circle(Vector2(0, -56), 11.0, core)
+		# Long trailing hair strands.
+		for i in 4:
+			var x := -10.0 + i * 6.0
+			draw_line(Vector2(x, -64), Vector2(x - 8 + sin(t * 3.0 + i) * 4.0, -24), Color(0.85, 0.92, 1.0, 0.5), 2.0, true)
+		draw_circle(Vector2(-3, -57), 2.4, Color(0.2, 0.5, 1.0))
+		draw_circle(Vector2(4, -57), 2.4, Color(0.2, 0.5, 1.0))
+		draw_circle(Vector2(0, -50), 22.0, Color(0.5, 0.7, 1.0, 0.08))
+		# Reaching arms.
+		draw_line(Vector2(8, -46), Vector2(24, -36 + sin(t * 3.0) * 3.0), core, 3.0, true)
+
+	func _bomber(t: float, fuse: bool) -> void:
+		## Bloated corpse with a pulsing red core; pulses fast while the fuse burns.
+		var pulse := 0.5 + 0.5 * sin(t * (24.0 if fuse else 6.0))
+		var flesh := Color(0.55, 0.3, 0.28)
+		_poly([Vector2(-10, 0), Vector2(-6, -18), Vector2(0, -18), Vector2(-2, 0)], Color(0.35, 0.22, 0.2))
+		_poly([Vector2(2, 0), Vector2(2, -18), Vector2(8, -18), Vector2(10, 0)], Color(0.35, 0.22, 0.2))
+		draw_circle(Vector2(0, -36), 20.0 + pulse * (3.0 if fuse else 1.0), flesh)
+		draw_arc(Vector2(0, -36), 20.0 + pulse * (3.0 if fuse else 1.0), 0, TAU, 24, Color(0.04, 0.03, 0.03), 2.0, true)
+		# Cracks leaking light.
+		for a in [0.3, 1.6, 2.7, 4.2, 5.4]:
+			draw_line(Vector2(0, -36) + Vector2.from_angle(a) * 6.0, Vector2(0, -36) + Vector2.from_angle(a + 0.3) * 18.0,
+				Color(1, 0.35 + 0.3 * pulse, 0.2), 2.0)
+		draw_circle(Vector2(0, -36), 7.0 + pulse * 3.0, Color(1, 0.25, 0.15, 0.85))
+		draw_circle(Vector2(0, -36), 26.0 + pulse * 6.0, Color(1, 0.15, 0.1, 0.12 + 0.2 * pulse))
+		draw_circle(Vector2(6, -58), 8.0, flesh)
+		draw_circle(Vector2(9, -60), 2.0, Color(1, 0.8, 0.3))
+
+	func _shield() -> void:
+		## Dark armoured soldier behind a tall tower shield (facing right).
+		var plate := Color(0.2, 0.2, 0.23)
+		var plate_hi := Color(0.36, 0.36, 0.4)
+		_poly([Vector2(-12, 0), Vector2(-9, -26), Vector2(-1, -26), Vector2(-3, 0)], plate)
+		_poly([Vector2(3, 0), Vector2(2, -26), Vector2(10, -26), Vector2(12, 0)], plate)
+		_poly([Vector2(-14, -26), Vector2(14, -26), Vector2(16, -60), Vector2(-16, -60)], plate)
+		draw_line(Vector2(-14, -44), Vector2(14, -44), Color(0.5, 0.1, 0.12), 3.0)
+		# Helm with red visor slit.
+		_poly([Vector2(-10, -60), Vector2(10, -60), Vector2(9, -78), Vector2(0, -84), Vector2(-9, -78)], plate_hi)
+		draw_line(Vector2(0, -71), Vector2(9, -71), Color(1, 0.2, 0.15), 3.0)
+		# Sword held low behind.
+		draw_line(Vector2(-14, -40), Vector2(-30, -8), Color(0.75, 0.76, 0.8), 4.0, true)
+		# Tower shield in front.
+		_poly([Vector2(14, -78), Vector2(32, -74), Vector2(32, -12), Vector2(23, -2), Vector2(14, -10)], Color(0.28, 0.27, 0.3))
+		draw_line(Vector2(15, -72), Vector2(31, -70), Color(0.6, 0.48, 0.3), 2.0)
+		draw_line(Vector2(23, -74), Vector2(23, -8), Color(0.6, 0.48, 0.3), 2.0)
+		draw_line(Vector2(15, -44), Vector2(31, -44), Color(0.6, 0.48, 0.3), 2.0)
+		draw_circle(Vector2(23, -44), 4.0, Color(0.7, 0.12, 0.15))
+
+	func _necro(t: float) -> void:
+		## Skull-faced robed caster with a glowing red staff.
+		var robe := Color(0.13, 0.08, 0.1)
+		_poly([Vector2(-18, 0), Vector2(18, 0), Vector2(11, -50), Vector2(-11, -50)], robe)
+		_poly([Vector2(-18, 0), Vector2(-6, 0), Vector2(-8, -30)], Color(0.45, 0.06, 0.1))
+		_poly([Vector2(-12, -48), Vector2(-5, -72), Vector2(5, -74), Vector2(13, -48)], Color(0.1, 0.06, 0.08))
+		draw_circle(Vector2(2, -58), 7.5, Color(0.86, 0.83, 0.74))
+		draw_circle(Vector2(0, -59), 2.0, Color(1, 0.15, 0.1))
+		draw_circle(Vector2(5, -59), 2.0, Color(1, 0.15, 0.1))
+		# Staff with a pulsing skull-orb.
+		draw_line(Vector2(18, 0), Vector2(18, -84), Color(0.3, 0.22, 0.18), 3.5, true)
+		var pulse := 0.6 + 0.4 * sin(t * 4.0)
+		draw_circle(Vector2(18, -90), 14.0 * pulse, Color(1, 0.1, 0.15, 0.25))
+		draw_circle(Vector2(18, -90), 6.0, Color(1, 0.3, 0.3))
+		draw_arc(Vector2(18, -90), 10.0, t * 2.0, t * 2.0 + 4.0, 10, Color(1, 0.2, 0.2, 0.8), 2.0, true)
+
+	func _skeleton() -> void:
+		var bone := Color(0.86, 0.83, 0.74)
+		draw_line(Vector2(-4, -20), Vector2(-6, 0), bone, 3.0)
+		draw_line(Vector2(4, -20), Vector2(6, 0), bone, 3.0)
+		_poly([Vector2(-8, -20), Vector2(8, -20), Vector2(8, -40), Vector2(-8, -40)], Color(0.25, 0.2, 0.18))
+		for i in 3:
+			draw_line(Vector2(-6, -36 + i * 5), Vector2(6, -36 + i * 5), bone, 2.0)
+		draw_circle(Vector2(1, -48), 8.0, bone)
+		draw_circle(Vector2(4, -49), 2.0, Color(1, 0.2, 0.15))
+		# Rusty blade.
+		draw_line(Vector2(8, -32), Vector2(24, -50), Color(0.55, 0.4, 0.3), 3.0, true)

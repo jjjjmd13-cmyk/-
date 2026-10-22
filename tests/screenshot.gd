@@ -32,6 +32,12 @@ func _shot(name: String) -> void:
 	print("saved ", name)
 
 
+func _clear(w: Node) -> void:
+	for e in w.enemies.duplicate():
+		e.xp = 0
+		e.die()
+
+
 func _run() -> void:
 	await _frames(90)
 	await _shot("01_main_menu")
@@ -66,6 +72,46 @@ func _run() -> void:
 		await _shot("%02d_combat_%s" % [i, hero])
 		Input.action_release("attack")
 		i += 1
+
+	# Monster line-up: every regular kind, normal and elite.
+	var lw: Node = _main._current
+	if lw._modal:
+		lw._close_modal()
+	# Keep level-up menus from pausing the captures below.
+	lw.pending_levels = 0
+	lw.player.level = 200
+	_clear(lw)
+	await _frames(5)
+	var kinds := ["ghoul", "bat", "archer", "brute", "cultist", "wraith", "bomber", "shield", "necro", "skeleton"]
+	var origin: Vector2 = lw.player.global_position + Vector2(-570, -300)
+	for k in kinds.size():
+		for row in 2:
+			var e: Node = lw.spawn_enemy_at(kinds[k], origin + Vector2(k * 126, row * 230), row == 1)
+			e.set_physics_process(false)
+	lw.player.set_physics_process(false)
+	await _frames(40)
+	await _shot("%02d_monsters" % i)
+	i += 1
+	lw.player.set_physics_process(true)
+	_clear(lw)
+
+	# Each boss in action.
+	for b in ["dread_knight", "blood_witch", "void_lord"]:
+		var bw: Node = _main._current
+		bw._start_wave({"dread_knight": 5, "blood_witch": 10, "void_lord": 15}[b])
+		await _frames(260)
+		await _shot("%02d_boss_%s" % [i, b])
+		i += 1
+		if is_instance_valid(bw.boss):
+			bw.boss.hp = bw.boss.max_hp * 0.2
+		await _frames(200)
+		await _shot("%02d_boss_%s_late" % [i, b])
+		i += 1
+		if is_instance_valid(bw.boss):
+			bw.boss.die()
+		_clear(bw)
+		bw.player.hp = bw.player.max_hp
+		await _frames(30)
 
 	# Boss, level-up, pause and result screens on the last run.
 	var w: Node = _main._current

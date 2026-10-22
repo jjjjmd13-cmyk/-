@@ -89,11 +89,12 @@ class HudCanvas extends Control:
 		# Boss health.
 		var boss: Node = world.boss
 		if is_instance_valid(boss) and not boss.dead:
-			var bb := Rect2(cx - 450, 100, 900, 26)
+			# Souls-style bar at the bottom keeps the top of the arena clear.
+			var bb := Rect2(cx - 450, size_v.y - 190, 900, 24)
 			_bar(bb, 1.0, Color(0.06, 0.03, 0.04, 0.92))
 			_bar(bb, clampf(boss.hp / boss.max_hp, 0.0, 1.0), Color(0.55, 0.05, 0.1))
 			draw_rect(bb, Color(0.86, 0.71, 0.42), false, 2.0)
-			_text_center(f, Game.t("boss_name"), Vector2(cx, 158), 26, Color(1, 0.75, 0.7))
+			_text_center(f, Game.t("boss_" + boss.kind), Vector2(cx, size_v.y - 202), 28, Color(1, 0.75, 0.7))
 			_boss_pointer(boss)
 
 		# ---- Time & kills (top-right).
@@ -165,7 +166,7 @@ class HudCanvas extends Control:
 		var dir := (screen_pos - center).normalized()
 		var edge := Vector2(
 			clampf(center.x + dir.x * size.x, 60, size.x - 60),
-			clampf(center.y + dir.y * size.y, 180, size.y - 60))
+			clampf(center.y + dir.y * size.y, 150, size.y - 230))
 		var pts := PackedVector2Array([
 			edge + dir * 24, edge + dir.orthogonal() * 16 - dir * 10, edge - dir.orthogonal() * 16 - dir * 10])
 		draw_colored_polygon(pts, Color(0.9, 0.15, 0.15, 0.85 + 0.15 * sin(banner_t * 8.0)))

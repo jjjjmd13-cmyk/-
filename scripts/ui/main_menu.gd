@@ -74,6 +74,7 @@ func _build() -> void:
 		start,
 		UI.button(Game.t("menu_settings"), _open_settings),
 		UI.button(Game.t("menu_controls"), func() -> void: _open_text(Game.t("controls_title"), Game.t("controls_body"))),
+		UI.button(Game.t("menu_bestiary"), _open_bestiary),
 		UI.button(Game.t("menu_credits"), func() -> void:
 			_open_text(Game.t("credits_title"), Game.t("credits_body") + _license_text(), true)),
 	]
@@ -123,6 +124,34 @@ func _license_text() -> String:
 func _escape(text: String) -> String:
 	# License texts contain square brackets that BBCode would try to parse.
 	return text.replace("[", "[lb]")
+
+
+func _open_bestiary() -> void:
+	## Full-screen monster sheet with a back button.
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(UI.dim_background(0.92))
+	var tr := TextureRect.new()
+	tr.texture = load("res://assets/bestiary/monster_sheet.png")
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tr.offset_top = 16
+	tr.offset_bottom = -96
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(tr)
+	var back := UI.button(Game.t("back"), func() -> void:
+		root.queue_free()
+		_on_popup_closed(), 320)
+	back.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	back.offset_left = -160
+	back.offset_right = 160
+	back.offset_top = -84
+	back.offset_bottom = -16
+	root.add_child(back)
+	_popup = root
+	add_child(root)
+	back.grab_focus.call_deferred()
 
 
 func _open_text(title_text: String, body: String, long_text: bool = false) -> void:

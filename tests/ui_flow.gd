@@ -80,6 +80,13 @@ func _run() -> void:
 	_press(menu, Game.t("back"))
 	await _frames(3)
 
+	_step = "main menu -> bestiary"
+	_press(menu, Game.t("menu_bestiary"))
+	await _frames(3)
+	_check(menu._popup != null, "bestiary shown")
+	_press(menu, Game.t("back"))
+	await _frames(3)
+
 	_step = "hero select"
 	_press(_main._current, Game.t("menu_start"))
 	await _frames(5)

@@ -61,6 +61,8 @@ var _combo := 0
 var _using_pad := false
 var _afterimage_t := 0.0
 var _heal_accum := 0.0
+## External pull applied this frame (Void Sovereign's gravity). Dashing ignores it.
+var _pull := Vector2.ZERO
 var _visual: Node2D
 
 
@@ -132,7 +134,7 @@ func _physics_process(delta: float) -> void:
 		if shadowstep > 0:
 			_shadowstep_hits()
 	else:
-		velocity = move * move_speed
+		velocity = move * move_speed + _pull
 		if Input.is_action_just_pressed("dash") and dash_timer <= 0.0:
 			_start_dash(move)
 		if (Input.is_action_pressed("attack") or Game.settings.auto_attack) and attack_timer <= 0.0:
@@ -140,6 +142,7 @@ func _physics_process(delta: float) -> void:
 		if Input.is_action_just_pressed("skill") and skill_timer <= 0.0:
 			_skill()
 	move_and_slide()
+	_pull = Vector2.ZERO
 
 	# Animation state.
 	if _attack_anim >= 0.0:
@@ -335,6 +338,10 @@ func _shadowstep_hits() -> void:
 
 
 # ------------------------------------------------------------------ damage
+func apply_pull(v: Vector2) -> void:
+	_pull = v
+
+
 func roll_damage(mult: float) -> Array:
 	## Returns [amount, is_crit].
 	var amount := damage * mult * randf_range(0.9, 1.1)
