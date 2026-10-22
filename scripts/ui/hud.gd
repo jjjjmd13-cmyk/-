@@ -78,8 +78,10 @@ class HudCanvas extends Control:
 		# ---- Wave info (top-centre).
 		var cx := size_v.x / 2.0
 		var wave_txt := Game.t("hud_wave") % [maxi(world.wave, 1), world.TOTAL_WAVES]
+		if world.endless:
+			wave_txt = Game.t("hud_wave_endless") % world.wave
 		_text_center(f, wave_txt, Vector2(cx, 56), 34, Game.COLOR_TEXT)
-		if world.state == "fighting" and not world.BOSS_WAVES.has(world.wave):
+		if world.state == "fighting" and not world.is_boss_wave(world.wave):
 			var wb := Rect2(cx - 160, 70, 320, 8)
 			_bar(wb, 1.0, Color(0.06, 0.03, 0.04, 0.9))
 			_bar(wb, clampf(world.wave_time / world.wave_duration, 0.0, 1.0), Color(0.86, 0.71, 0.42))

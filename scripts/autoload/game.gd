@@ -144,11 +144,12 @@ func get_record(hero_id: String) -> Dictionary:
 	return records[hero_id]
 
 
-func submit_run(hero_id: String, wave: int, kills: int, won: bool) -> bool:
+func submit_run(hero_id: String, wave: int, kills: int, won: bool, count_run: bool = true) -> bool:
 	## Stores a finished run. Returns true when it set a new best wave.
 	var rec := get_record(hero_id)
 	var new_best := wave > int(rec.best_wave)
-	rec.runs = int(rec.runs) + 1
+	if count_run:
+		rec.runs = int(rec.runs) + 1
 	rec.best_wave = maxi(int(rec.best_wave), wave)
 	rec.best_kills = maxi(int(rec.best_kills), kills)
 	if won:

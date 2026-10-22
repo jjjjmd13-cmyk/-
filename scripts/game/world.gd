@@ -15,7 +15,8 @@ const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
 const EndScreen := preload("res://scripts/ui/end_screen.gd")
 
 const TOTAL_WAVES := 15
-const BOSS_WAVES := [5, 10, 15]
+## A boss appears every BOSS_EVERY waves (5, 10, 15, then 20, 25... in endless mode).
+const BOSS_EVERY := 5
 const ARENA := Rect2(-1700, -1300, 3400, 2600)
 const MAX_ENEMIES := 170
 const MAX_PICKUPS := 260
@@ -31,6 +32,8 @@ var state := "intermission"
 var run_time := 0.0
 var kills := 0
 var vacuum := false
+## True after the player chose to keep going past the final wave.
+var endless := false
 var pending_levels := 0
 var rng := RandomNumberGenerator.new()
 
@@ -218,7 +221,7 @@ func _update_waves(delta: float) -> void:
 			_spawn_t -= delta
 			if _spawn_t <= 0.0:
 				_spawn_group()
-			if not BOSS_WAVES.has(wave) and wave_time >= wave_duration:
+			if not is_boss_wave(wave) and wave_time >= wave_duration:
 				state = "intermission"
 				_state_t = 2.0
 
@@ -229,7 +232,7 @@ func _start_wave(n: int) -> void:
 	state = "fighting"
 	wave_duration = 30.0 + wave * 1.5
 	_spawn_t = 0.5
-	if BOSS_WAVES.has(wave):
+	if is_boss_wave(wave):
 		_hud.show_banner(Game.t("wave_banner") % wave, Game.t("boss_banner"))
 		Audio.play("boss_roar")
 		Audio.play_music("boss")
@@ -242,6 +245,10 @@ func _start_wave(n: int) -> void:
 		_hud.show_banner(Game.t("wave_banner") % wave, hint, 6.0 if wave == 1 else 3.0)
 		Audio.play("wave_horn")
 		Audio.play_music("battle")
+
+
+func is_boss_wave(w: int) -> bool:
+	return w > 0 and w % BOSS_EVERY == 0
 
 
 func _hp_mult() -> float:
@@ -330,7 +337,7 @@ func _spawn_boss() -> void:
 		pos = player.global_position + Vector2(0, 520)
 	boss = spawn_enemy_at("boss", pos)
 	# Bosses scale less steeply than the horde so fights stay reasonable.
-	var mult := 1.0 + 0.6 * float(BOSS_WAVES.find(wave))
+	var mult := 1.0 + 0.6 * float(wave / BOSS_EVERY - 1)
 	boss.max_hp = Enemy.KINDS.boss.hp * mult * (1.0 + 0.05 * wave) * float(Game.DIFFICULTY[Game.difficulty].hp)
 	boss.hp = boss.max_hp
 	shake(10.0)
@@ -392,7 +399,7 @@ func _on_boss_killed(e: Node) -> void:
 	boss = null
 	vacuum = true
 	get_tree().create_timer(2.5, false).timeout.connect(func() -> void: vacuum = false)
-	if wave >= TOTAL_WAVES:
+	if wave >= TOTAL_WAVES and not endless:
 		_win()
 	else:
 		state = "intermission"
@@ -605,19 +612,40 @@ func _finish(won: bool) -> void:
 		_modal = null
 	_ended = true
 	var reached := wave if not won else TOTAL_WAVES
-	var new_best := Game.submit_run(Game.selected_hero, reached, kills, won)
+	# An endless run was already counted when the final wave was beaten.
+	var new_best := Game.submit_run(Game.selected_hero, reached, kills, won, not endless)
 	var m := EndScreen.new()
 	m.won = won
+	m.can_continue = won and not endless
 	m.new_best = new_best
 	m.wave = reached
 	m.kills = kills
 	m.level = player.level
 	m.time = run_time
-	m.choice.connect(func(target: String) -> void: exit_requested.emit(target))
+	m.choice.connect(func(target: String) -> void:
+		if target == "endless":
+			_continue_endless()
+		else:
+			exit_requested.emit(target))
 	_overlay.add_child(m)
 	_modal = m
 	_set_crosshair(false)
 	get_tree().paused = true
+
+
+func _continue_endless() -> void:
+	endless = true
+	_ended = false
+	if _modal:
+		_modal.queue_free()
+		_modal = null
+	get_tree().paused = false
+	_set_crosshair(true)
+	vacuum = false
+	state = "intermission"
+	_state_t = 3.0
+	_hud.show_banner(Game.t("endless_banner"), Game.t("endless_sub"), 3.0)
+	Audio.play_music("battle")
 
 
 func _set_crosshair(on: bool) -> void:

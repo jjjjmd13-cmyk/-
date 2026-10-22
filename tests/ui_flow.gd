@@ -118,6 +118,24 @@ func _run() -> void:
 	await _frames(5)
 	_check(world._modal == null and not get_tree().paused, "level-ups done")
 
+	_step = "victory -> endless mode -> boss 20 -> death"
+	world._win()
+	await _frames(200)
+	_check(world._ended and get_tree().paused, "victory screen shown")
+	await _frames(60)
+	_press(world._modal, Game.t("end_endless"))
+	await _frames(5)
+	_check(world.endless and not world._ended and not get_tree().paused, "endless mode running")
+	world._start_wave(20)
+	await _frames(30)
+	_check(is_instance_valid(world.boss) and world.boss.max_hp > 0.0, "wave 20 boss spawned")
+	world.player.take_damage(99999.0, null)
+	await _frames(220)
+	_check(world._ended and _find(world._modal, "Button", Game.t("end_endless")) == null, "endless death screen")
+	_press(world._modal, Game.t("end_retry"))
+	await _frames(10)
+	world = _main._current
+
 	_step = "pause -> restart"
 	world.open_pause()
 	await _frames(3)

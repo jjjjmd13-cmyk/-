@@ -6,6 +6,8 @@ signal choice(target: String)
 const UI := preload("res://scripts/ui/ui.gd")
 
 var won := false
+## Offer to keep playing in endless mode (after a first victory).
+var can_continue := false
 var new_best := false
 var wave := 1
 var kills := 0
@@ -46,6 +48,10 @@ func _ready() -> void:
 	var spacer := Control.new()
 	spacer.custom_minimum_size.y = 16
 	col.add_child(spacer)
+	if can_continue:
+		var cont := UI.button(Game.t("end_endless"), func() -> void: choice.emit("endless"))
+		cont.add_theme_color_override("font_color", Game.COLOR_GOLD)
+		_buttons.append(cont)
 	_buttons.append(UI.button(Game.t("end_retry"), func() -> void: choice.emit("retry")))
 	_buttons.append(UI.button(Game.t("end_heroes"), func() -> void: choice.emit("select")))
 	_buttons.append(UI.button(Game.t("end_menu"), func() -> void: choice.emit("menu")))
