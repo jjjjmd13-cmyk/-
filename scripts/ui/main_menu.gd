@@ -74,7 +74,8 @@ func _build() -> void:
 		start,
 		UI.button(Game.t("menu_settings"), _open_settings),
 		UI.button(Game.t("menu_controls"), func() -> void: _open_text(Game.t("controls_title"), Game.t("controls_body"))),
-		UI.button(Game.t("menu_credits"), func() -> void: _open_text(Game.t("credits_title"), Game.t("credits_body"))),
+		UI.button(Game.t("menu_credits"), func() -> void:
+			_open_text(Game.t("credits_title"), Game.t("credits_body") + _license_text(), true)),
 	]
 	if OS.get_name() != "Web":
 		buttons.append(UI.button(Game.t("menu_quit"), func() -> void: Game.quit_game()))
@@ -104,7 +105,27 @@ func _open_settings() -> void:
 	add_child(s)
 
 
-func _open_text(title_text: String, body: String) -> void:
+func _license_text() -> String:
+	## Godot and third-party notices, which must ship with the game.
+	var out := "\n\n[b]%s[/b]\n\n%s" % [Game.t("license_title"), _escape(Engine.get_license_text())]
+	out += "\n\nPortions of this software are copyright © The FreeType Project (www.freetype.org). All rights reserved.\n"
+	for info in Engine.get_copyright_info():
+		out += "\n[b]%s[/b]\n" % info.name
+		for part in info.parts:
+			for c in part.copyright:
+				out += "© %s\n" % _escape(c)
+			out += "License: %s\n" % _escape(part.license)
+	for text in Engine.get_license_info().values():
+		out += "\n\n" + _escape(text)
+	return out
+
+
+func _escape(text: String) -> String:
+	# License texts contain square brackets that BBCode would try to parse.
+	return text.replace("[", "[lb]")
+
+
+func _open_text(title_text: String, body: String, long_text: bool = false) -> void:
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(UI.dim_background(0.8))
@@ -122,15 +143,18 @@ func _open_text(title_text: String, body: String) -> void:
 	col.add_child(UI.title(title_text, 56))
 	var rt := RichTextLabel.new()
 	rt.bbcode_enabled = true
-	rt.fit_content = true
-	rt.scroll_active = false
+	rt.fit_content = not long_text
+	rt.scroll_active = long_text
+	if long_text:
+		rt.custom_minimum_size.y = 560
+		rt.focus_mode = Control.FOCUS_ALL
 	rt.text = body
 	rt.add_theme_font_size_override("normal_font_size", 26)
 	rt.add_theme_font_size_override("bold_font_size", 28)
 	rt.add_theme_font_override("normal_font", Game.font)
 	rt.add_theme_font_override("bold_font", Game.font_bold)
 	rt.add_theme_color_override("default_color", Game.COLOR_TEXT)
-	rt.custom_minimum_size = Vector2(820, 0)
+	rt.custom_minimum_size.x = 820
 	col.add_child(rt)
 	var back := UI.button(Game.t("back"), func() -> void:
 		root.queue_free()

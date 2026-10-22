@@ -18,6 +18,8 @@ config/features=PackedStringArray("4.3", "GL Compatibility")
 boot_splash/bg_color=Color(0.055, 0.04, 0.05, 1)
 boot_splash/show_image=false
 config/icon="res://assets/icon/icon.png"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="CrimsonOath"
 
 [autoload]
 

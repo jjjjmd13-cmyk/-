@@ -35,6 +35,12 @@ func _shot(name: String) -> void:
 func _run() -> void:
 	await _frames(90)
 	await _shot("01_main_menu")
+	var menu: Node = _main._current
+	menu._open_text(Game.t("credits_title"), Game.t("credits_body") + menu._license_text(), true)
+	await _frames(20)
+	await _shot("01b_credits")
+	menu._popup.queue_free()
+	menu._on_popup_closed()
 	_main.show_select()
 	await _frames(40)
 	await _shot("02_hero_select")
