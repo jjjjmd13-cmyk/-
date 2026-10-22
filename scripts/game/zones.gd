@@ -1,9 +1,14 @@
 extends RefCounted
+const ART := preload("res://scripts/game/combat_art.gd")
 ## Lingering ground effects created by hero skills. Each frees itself.
 
 
 ## Mage: pulls monsters toward its centre and damages them.
 class GravityWell extends Node2D:
+	var _vortex: Sprite2D
+
+	func _ready() -> void:
+		_vortex = ART.stamp(self, "mage", 3, radius * 2.5)
 	var world: Node
 	var radius := 190.0
 	var duration := 3.0
@@ -26,18 +31,21 @@ class GravityWell extends Node2D:
 			e.add_pull(to.normalized() * minf(320.0, to.length() * 4.0))
 			if hit_now:
 				world.player_hit_enemy(e, dmg_mult, Vector2.ZERO)
+		if _vortex:
+			_vortex.rotation = -_t * 0.65
+			_vortex.modulate.a = minf(_t * 4, 0.5) * clampf((duration - _t) / 0.4, 0, 1)
 		queue_redraw()
 
 	func _draw() -> void:
 		var fade := clampf((duration - _t) / 0.4, 0.0, 1.0) * clampf(_t / 0.2, 0.0, 1.0)
-		draw_circle(Vector2.ZERO, radius, Color(0.25, 0.3, 0.9, 0.12 * fade))
+		draw_circle(Vector2.ZERO, radius, Color(0.25, 0.3, 0.9, 0.035 * fade))
 		for i in 4:
 			var pts := PackedVector2Array()
 			for k in 24:
 				var f := float(k) / 23.0
 				var a := _t * 5.0 + i * TAU / 4.0 + f * 4.0
 				pts.append(Vector2.from_angle(a) * radius * (1.0 - f * 0.9))
-			draw_polyline(pts, Color(0.6, 0.7, 1.0, 0.5 * fade), 3.0, true)
+			draw_polyline(pts, Color(0.6, 0.7, 1.0, 0.2 * fade), 1.5, true)
 		draw_circle(Vector2.ZERO, 16.0, Color(0.05, 0.05, 0.2, 0.9 * fade))
 		draw_arc(Vector2.ZERO, 18.0, 0, TAU, 24, Color(0.8, 0.85, 1.0, fade), 3.0, true)
 
@@ -75,24 +83,30 @@ class ArrowRain extends Node2D:
 
 	func _draw() -> void:
 		var fade := clampf((duration - _t) / 0.4, 0.0, 1.0)
-		draw_circle(Vector2.ZERO, radius, Color(0.4, 0.7, 0.3, 0.1 * fade))
-		draw_arc(Vector2.ZERO, radius, 0, TAU, 64, Color(0.6, 0.9, 0.4, 0.6 * fade), 3.0, true)
+		draw_circle(Vector2.ZERO, radius, Color(0.4, 0.7, 0.3, 0.025 * fade))
+		draw_arc(Vector2.ZERO, radius, 0, TAU, 64, Color(0.6, 0.9, 0.4, 0.35 * fade), 1.5, true)
 		for s in _streaks:
 			var k: float = s.t / 0.18
 			var head: Vector2 = s.p + Vector2(-30, -160) * (1.0 - k)
-			draw_line(head + Vector2(-8, -40), head, Color(0.85, 0.8, 0.6, 0.8 * fade), 2.0, true)
+			var dir := Vector2(0.2, 1).normalized()
+			draw_line(head - dir * 65, head, Color(0.5, 0.95, 0.37, 0.12 * fade), 9, true)
+			draw_line(head - dir * 44, head, Color(0.84, 0.96, 0.64, 0.85 * fade), 2.0, true)
+			draw_colored_polygon(PackedVector2Array([head + dir * 8, head - dir * 5 + dir.orthogonal() * 3, head - dir * 5 - dir.orthogonal() * 3]), Color(0.9, 1, 0.74, fade))
 			if k > 0.85:
 				draw_circle(s.p, 5.0, Color(0.9, 0.9, 0.7, 0.6 * fade))
 
 
 ## Ranger: snare left behind by the vault; roots monsters standing in it.
 class Snare extends Node2D:
+	var _leaves: Sprite2D
 	var world: Node
 	var radius := 130.0
 	var duration := 2.6
 	var _t := 0.0
 
 	func _ready() -> void:
+		_leaves = ART.stamp(self, "ranger", 3, radius * 2.2)
+		_leaves.modulate.a = 0.24
 		for e in world.enemies_in_radius(global_position, radius):
 			world.player_hit_enemy(e, 1.0, Vector2.ZERO)
 
@@ -107,8 +121,8 @@ class Snare extends Node2D:
 
 	func _draw() -> void:
 		var fade := clampf((duration - _t) / 0.4, 0.0, 1.0)
-		draw_circle(Vector2.ZERO, radius, Color(0.3, 0.5, 0.2, 0.15 * fade))
-		draw_arc(Vector2.ZERO, radius, 0, TAU, 48, Color(0.55, 0.85, 0.35, 0.8 * fade), 3.0, true)
+		draw_circle(Vector2.ZERO, radius, Color(0.3, 0.5, 0.2, 0.025 * fade))
+		draw_arc(Vector2.ZERO, radius, 0, TAU, 48, Color(0.55, 0.85, 0.35, 0.3 * fade), 1.5, true)
 		for i in 10:
 			var a := TAU * i / 10.0 + _t * 0.5
 			var base := Vector2.from_angle(a) * radius * 0.75
@@ -117,11 +131,14 @@ class Snare extends Node2D:
 
 ## Rogue: smoke cloud around the hero while they are hidden.
 class Smoke extends Node2D:
+	var _mist: Sprite2D
 	var duration := 3.0
 	var _t := 0.0
 	var _puffs: Array = []
 
 	func _ready() -> void:
+		_mist = ART.stamp(self, "rogue", 3, 300)
+		_mist.position.y = -30
 		for i in 14:
 			_puffs.append({"p": Vector2.from_angle(randf() * TAU) * randf_range(10.0, 90.0), "r": randf_range(30.0, 60.0), "s": randf() * TAU})
 
@@ -134,6 +151,9 @@ class Smoke extends Node2D:
 
 	func _draw() -> void:
 		var fade := clampf((duration - _t) / 0.8, 0.0, 1.0) * clampf(_t / 0.15, 0.0, 1.0)
+		if _mist:
+			_mist.modulate.a = 0.38 * fade
+			_mist.rotation = _t * 0.3
 		for p in _puffs:
 			var drift := Vector2(sin(_t * 1.5 + p.s) * 10.0, -_t * 14.0)
 			draw_circle(p.p + drift, p.r * (1.0 + _t * 0.15), Color(0.22, 0.2, 0.24, 0.35 * fade))

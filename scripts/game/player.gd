@@ -271,6 +271,7 @@ func _attack() -> void:
 
 func _melee(origin: Vector2, reach: float, arc_deg: float, mult: float, knock: float) -> void:
 	var slash = FX.Slash.new()
+	slash.theme = hero_id
 	slash.radius = reach * 0.85
 	slash.arc = deg_to_rad(arc_deg)
 	slash.width = 34.0 if hero_id == "knight" else 22.0
@@ -398,6 +399,7 @@ func _blade_dance(delta: float) -> void:
 	var ai = _afterimage(from, data.accent)
 	world.add_ground_fx(ai)
 	var slash = FX.Slash.new()
+	slash.theme = hero_id
 	slash.radius = 60.0
 	slash.color = data.accent
 	slash.rotation = aim_dir.angle()

@@ -10,6 +10,7 @@ const Projectile := preload("res://scripts/game/projectile.gd")
 const EnemyProjectile := preload("res://scripts/game/enemy_projectile.gd")
 const Pickup := preload("res://scripts/game/pickup.gd")
 const FX := preload("res://scripts/game/fx.gd")
+const ART := preload("res://scripts/game/combat_art.gd")
 const Hud := preload("res://scripts/ui/hud.gd")
 const LevelUpMenu := preload("res://scripts/ui/levelup_menu.gd")
 const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
@@ -171,6 +172,7 @@ func _build_arena() -> void:
 		var pillar := Pillar.new()
 		pillar.position = p
 		pillar.broken = rng.randf() < 0.4
+		pillar.relic = placed.size() % 4 == 0 and not pillar.broken
 		_entities.add_child(pillar)
 
 	# Braziers mark the arena corners.
@@ -178,6 +180,15 @@ func _build_arena() -> void:
 		var b := Brazier.new()
 		b.position = c * (ARENA.size / 2.0 - Vector2(140, 140))
 		_entities.add_child(b)
+
+	# Decorative pools of warm light frame the central fighting space.
+	for at in [Vector2(-570, -370), Vector2(570, -370), Vector2(-940, 420), Vector2(940, 420)]:
+		var b := Brazier.new()
+		b.position = at
+		_entities.add_child(b)
+	var air := CourtyardAir.new()
+	air.z_index = 25
+	add_child(air)
 
 
 # ------------------------------------------------------------------ main loop
@@ -706,53 +717,65 @@ class ArenaFloor extends Node2D:
 	var seed_value := 0
 
 	func _draw() -> void:
-		var r := RandomNumberGenerator.new()
-		r.seed = seed_value
-		# Dark void beyond the arena.
-		draw_rect(rect.grow(1200), Color(0.035, 0.028, 0.032))
-		var tile := 96.0
-		var cols := int(rect.size.x / tile)
-		var rows := int(rect.size.y / tile)
-		for y in rows:
-			for x in cols:
-				var p := rect.position + Vector2(x, y) * tile
-				var v := r.randf_range(-0.018, 0.018)
-				var base := Color(0.17 + v, 0.15 + v, 0.15 + v)
-				# Darken towards the edges to focus the eye on the centre.
-				var dist := (p + Vector2(tile, tile) / 2.0).length() / rect.size.length() * 2.0
-				base = base.darkened(clampf(dist * 0.45, 0.0, 0.5))
-				draw_rect(Rect2(p + Vector2(2, 2), Vector2(tile - 4, tile - 4)), base)
-				if r.randf() < 0.12:
-					var a := p + Vector2(r.randf() * tile, r.randf() * tile)
-					draw_line(a, a + Vector2(r.randf_range(-30, 30), r.randf_range(-30, 30)), base.darkened(0.4), 2.0)
-		# Blood stains and moss.
-		for i in 70:
-			var c := rect.position + Vector2(r.randf() * rect.size.x, r.randf() * rect.size.y)
-			var col := Color(0.32, 0.04, 0.06, 0.35) if r.randf() < 0.6 else Color(0.18, 0.24, 0.12, 0.35)
-			for k in 4:
-				draw_circle(c + Vector2(r.randf_range(-24, 24), r.randf_range(-14, 14)), r.randf_range(8, 26), col)
-		# Ritual circle in the middle.
-		draw_arc(Vector2.ZERO, 300, 0, TAU, 96, Color(0.45, 0.08, 0.1, 0.5), 6.0, true)
-		draw_arc(Vector2.ZERO, 260, 0, TAU, 96, Color(0.45, 0.08, 0.1, 0.35), 3.0, true)
-		for i in 7:
-			var a := TAU * i / 7.0
-			var b := TAU * ((i + 3) % 7) / 7.0
-			draw_line(Vector2.from_angle(a) * 260, Vector2.from_angle(b) * 260, Color(0.45, 0.08, 0.1, 0.3), 3.0)
-		# Raised wall border.
-		var wall := Color(0.1, 0.08, 0.09)
-		var t := 60.0
-		draw_rect(Rect2(rect.position - Vector2(t, t * 2.5), Vector2(rect.size.x + t * 2, t * 2.5)), wall)
-		draw_rect(Rect2(rect.position + Vector2(-t, rect.size.y), Vector2(rect.size.x + t * 2, t)), wall)
-		draw_rect(Rect2(rect.position - Vector2(t, 0), Vector2(t, rect.size.y)), wall)
-		draw_rect(Rect2(Vector2(rect.end.x, rect.position.y), Vector2(t, rect.size.y)), wall)
-		draw_rect(rect, Color(0.42, 0.33, 0.24, 0.6), false, 4.0)
-
+		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		draw_rect(rect.grow(1200), Color(0.016, 0.025, 0.035))
+		var ground := ART.texture("res://assets/environment/courtyard-floor.png")
+		var tile := 768.0
+		# Static batched canvas commands; texture work never runs in the physics loop.
+		for y in int(ceil(rect.size.y / tile)):
+			for x in int(ceil(rect.size.x / tile)):
+				var dest := Rect2(rect.position + Vector2(x, y) * tile, Vector2.ONE * tile)
+				var clipped := dest.intersection(rect)
+				var region := Rect2(Vector2.ZERO, clipped.size / tile * ground.get_size())
+				# Mirrored neighbours share the exact same edge texels, hiding AI tile seams.
+				var mirror := Vector2(-1 if x % 2 else 1, -1 if y % 2 else 1)
+				var shift := Vector2(clipped.size.x if mirror.x < 0 else 0, clipped.size.y if mirror.y < 0 else 0)
+				if mirror.x < 0:
+					region.position.x = ground.get_width() - region.size.x
+				if mirror.y < 0:
+					region.position.y = ground.get_height() - region.size.y
+				draw_set_transform(clipped.position + shift, 0, mirror)
+				draw_texture_rect_region(ground, Rect2(Vector2.ZERO, clipped.size), region, Color(0.83, 0.87, 0.94))
+		draw_set_transform(Vector2.ZERO)
+		# Inlaid bronze bands and an eroded stone rose, part of the floor, not a hazard.
+		for side in [-1, 1]:
+			for off in [0, 7]:
+				draw_line(Vector2(rect.position.x, side * (425 + off)), Vector2(rect.end.x, side * (425 + off)), Color(0.35, 0.32, 0.25, 0.32), 2, true)
+				draw_line(Vector2(side * (490 + off), rect.position.y), Vector2(side * (490 + off), rect.end.y), Color(0.35, 0.32, 0.25, 0.32), 2, true)
+		draw_circle(Vector2.ZERO, 355, Color(0.025, 0.03, 0.04, 0.2))
+		for radius in [286, 299, 330, 346, 354]:
+			draw_arc(Vector2(0, 2), radius, 0, TAU, 160, Color(0.01, 0.016, 0.023, 0.48), 4, true)
+			draw_arc(Vector2.ZERO, radius, 0, TAU, 160, Color(0.45, 0.39, 0.27, 0.36), 2, true)
+		for i in 32:
+			var dir := Vector2.from_angle(TAU * i / 32)
+			var tangent := dir.orthogonal()
+			var at := dir * 315
+			draw_polyline(PackedVector2Array([at - tangent * 5, at + dir * 8, at + tangent * 5, at - dir * 7, at - tangent * 5]), Color(0.54, 0.46, 0.29, 0.32), 2, true)
+		for i in 8:
+			var a := TAU * i / 8 - PI / 2
+			var tip := Vector2.from_angle(a) * (268 if i % 2 == 0 else 225)
+			var left := Vector2.from_angle(a - 0.22) * 82
+			var right := Vector2.from_angle(a + 0.22) * 82
+			draw_colored_polygon(PackedVector2Array([Vector2.ZERO, left, tip]), Color(0.45, 0.41, 0.32, 0.15))
+			draw_colored_polygon(PackedVector2Array([Vector2.ZERO, right, tip]), Color(0.02, 0.025, 0.035, 0.22))
+			draw_line(left, tip, Color(0.62, 0.53, 0.34, 0.27), 1.3, true)
+		# A raised, beveled perimeter with regular stone buttresses.
+		for inset in [0, 8, 22, 50, 64]:
+			var col := Color(0.18, 0.2, 0.22) if inset % 2 == 0 else Color(0.32, 0.3, 0.26)
+			draw_rect(rect.grow(inset), col, false, 5 if inset < 10 else 12)
+		for i in 19:
+			for side in [-1, 1]:
+				var at := Vector2(rect.position.x + i * rect.size.x / 18.0, side * (rect.size.y / 2 + 40))
+				draw_rect(Rect2(at - Vector2(25, 30), Vector2(50, 60)), Color(0.19, 0.2, 0.21))
+				draw_line(at + Vector2(-25, -30), at + Vector2(25, -30), Color(0.42, 0.4, 0.34), 3)
 
 class Pillar extends StaticBody2D:
 	var broken := false
+	var relic := false
 
 	func _ready() -> void:
 		collision_layer = 1
+		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		var cs := CollisionShape2D.new()
 		var c := CircleShape2D.new()
 		c.radius = 36.0
@@ -760,28 +783,37 @@ class Pillar extends StaticBody2D:
 		add_child(cs)
 
 	func _draw() -> void:
-		draw_set_transform(Vector2(6, 4), 0.0, Vector2(1, 0.4))
-		draw_circle(Vector2.ZERO, 54.0, Color(0, 0, 0, 0.4))
+		draw_set_transform(Vector2(18, 8), 0, Vector2(1.2, 0.4))
+		for i in 5:
+			draw_circle(Vector2.ZERO, 36 + i * 7, Color(0, 0.008, 0.018, 0.045))
 		draw_set_transform(Vector2.ZERO)
-		var h := 110.0 if broken else 190.0
-		var stone := Color(0.36, 0.33, 0.32)
-		draw_rect(Rect2(-46, -22, 92, 26), Color(0.26, 0.24, 0.24))
-		draw_rect(Rect2(-34, -h, 68, h - 16), stone)
-		for i in 4:
-			var x := -24.0 + i * 16.0
-			draw_line(Vector2(x, -h + 6), Vector2(x, -22), stone.darkened(0.25), 3.0)
-		draw_rect(Rect2(-34, -h, 68, h - 16), Color(0.05, 0.04, 0.04), false, 2.0)
-		if broken:
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(-34, -h), Vector2(-10, -h - 22), Vector2(8, -h - 8), Vector2(34, -h - 18), Vector2(34, -h)]),
-				stone.lightened(0.08))
-		else:
-			draw_rect(Rect2(-44, -h - 20, 88, 22), stone.lightened(0.1))
-			draw_rect(Rect2(-44, -h - 20, 88, 22), Color(0.05, 0.04, 0.04), false, 2.0)
-		draw_rect(Rect2(-46, -22, 92, 26), Color(0.05, 0.04, 0.04), false, 2.0)
-
+		var tex := ART.prop(3 if relic else (1 if broken else 0))
+		var width := 230.0 if relic else 210.0
+		draw_texture_rect(tex, Rect2(-width / 2, -width * 0.86, width, width), false, Color(0.79, 0.83, 0.89))
 
 class Brazier extends Node2D:
+	var _t := 0.0
+
+	func _ready() -> void:
+		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+
+	func _process(delta: float) -> void:
+		_t += delta
+		queue_redraw()
+
+	func _draw() -> void:
+		var flick := 1.0 + sin(_t * 13.0) * 0.035 + sin(_t * 7.3) * 0.035
+		for i in 8:
+			draw_set_transform(Vector2(0, -15), 0, Vector2(1, 0.6))
+			draw_circle(Vector2.ZERO, (220 - i * 23) * flick, Color(1, 0.42, 0.12, 0.016))
+		draw_set_transform(Vector2.ZERO)
+		draw_texture_rect(ART.prop(2), Rect2(-94, -163, 188, 188), false, Color(1, 0.94 + flick * 0.03, 0.85))
+		for i in 6:
+			var f := fmod(_t * (0.23 + i * 0.035) + i * 0.17, 1.0)
+			var at := Vector2(sin(i * 2.3 + _t) * 20 * f, -95 - f * 105)
+			draw_circle(at, 1.0 + (1 - f), Color(1, 0.6, 0.2, (1 - f) * 0.8))
+
+class CourtyardAir extends Node2D:
 	var _t := 0.0
 
 	func _process(delta: float) -> void:
@@ -789,15 +821,9 @@ class Brazier extends Node2D:
 		queue_redraw()
 
 	func _draw() -> void:
-		var flick := 1.0 + sin(_t * 13.0) * 0.08 + sin(_t * 7.3) * 0.06
-		draw_circle(Vector2(0, -60), 150.0 * flick, Color(1, 0.45, 0.15, 0.06))
-		draw_circle(Vector2(0, -60), 80.0 * flick, Color(1, 0.5, 0.2, 0.08))
-		draw_rect(Rect2(-6, -50, 12, 50), Color(0.2, 0.16, 0.14))
-		draw_colored_polygon(PackedVector2Array([
-			Vector2(-24, -62), Vector2(24, -62), Vector2(16, -48), Vector2(-16, -48)]), Color(0.3, 0.24, 0.2))
-		for i in 3:
-			var off := sin(_t * 9.0 + i * 2.0) * 4.0
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(-16 + i * 10, -62), Vector2(-8 + i * 10 + off, -96 + i * 8 * flick), Vector2(i * 10 - 2, -62)]),
-				Color(1, 0.55 + i * 0.12, 0.15))
-		draw_circle(Vector2(0, -68), 8.0 * flick, Color(1, 0.9, 0.5))
+		# Deterministic motes: visual animation never consumes the gameplay RNG.
+		for i in 70:
+			var x := sin(i * 73.17) * 1600 + sin(_t * 0.12 + i) * 24
+			var y := fposmod(sin(i * 31.13) * 1300 - _t * (5 + i % 7), 2600) - 1300
+			var alpha := 0.08 + 0.12 * (0.5 + 0.5 * sin(_t * 0.7 + i))
+			draw_circle(Vector2(x, y), 1 + i % 2, Color(0.76, 0.84, 0.9, alpha))

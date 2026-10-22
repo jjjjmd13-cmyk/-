@@ -1,4 +1,5 @@
 extends Node2D
+const ART := preload("res://scripts/game/combat_art.gd")
 ## Player projectile: arrows, star orbs, thrown daggers and cleave waves.
 
 var world: Node
@@ -15,6 +16,13 @@ var knockback := 80.0
 var _hit := {}
 var _t := 0.0
 var _trail: Array[Vector2] = []
+var _aura: Sprite2D
+
+func _ready() -> void:
+	if kind == "orb" or kind == "wave":
+		_aura = ART.stamp(self, "mage" if kind == "orb" else "knight", 2 if kind == "orb" else 1, 74 if kind == "orb" else 110)
+		_aura.modulate.a = 0.8
+
 
 
 func _process(delta: float) -> void:
@@ -32,6 +40,9 @@ func _process(delta: float) -> void:
 		_trail.pop_front()
 	position += velocity * delta
 	rotation = velocity.angle()
+	if _aura:
+		_aura.rotation = _t * 2 if kind == "orb" else 0.0
+		_aura.modulate.a = 0.8 if kind == "orb" else (1.0 - _t / life) * 0.8
 	if not world.arena_rect.has_point(global_position):
 		_expire()
 		return
@@ -75,7 +86,7 @@ func _draw() -> void:
 		var alpha := float(i) / _trail.size()
 		var a := to_local(_trail[i - 1])
 		var b := to_local(_trail[i])
-		draw_line(a, b, Color(trail_color.r, trail_color.g, trail_color.b, alpha * 0.12), 12.0 * alpha, true)
+		draw_line(a, b, Color(trail_color.r, trail_color.g, trail_color.b, alpha * 0.12), 16.0 * alpha, true)
 		draw_line(a, b, Color(trail_color.r, trail_color.g, trail_color.b, alpha * 0.75), 2.5 * alpha, true)
 	match kind:
 		"arrow":

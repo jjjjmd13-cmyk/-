@@ -117,6 +117,7 @@ func quit_game() -> void:
 	# Give the audio thread a moment to drop its playbacks before exiting.
 	await get_tree().process_frame
 	await get_tree().process_frame
+	preload("res://scripts/game/combat_art.gd").release_cache()
 	get_tree().quit()
 
 

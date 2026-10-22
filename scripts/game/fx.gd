@@ -1,9 +1,17 @@
 extends RefCounted
+const ART := preload("res://scripts/game/combat_art.gd")
 ## Short-lived visual effects. Each class frees itself when finished.
 
 
 ## Crescent sword/dagger trail.
 class Slash extends Node2D:
+	var theme := "knight"
+	var _blade: Sprite2D
+	var _base_scale := Vector2.ONE
+
+	func _ready() -> void:
+		_blade = ART.stamp(self, theme, 1, radius * 2.6)
+		_base_scale = _blade.scale
 	var radius := 90.0
 	var arc := deg_to_rad(140.0)
 	var color := Color(1, 0.9, 0.8)
@@ -23,6 +31,10 @@ class Slash extends Node2D:
 		var sweep := arc * clampf(k * 2.2, 0.15, 1.0)
 		var start := -arc / 2.0
 		var alpha := 1.0 - k
+		if _blade:
+			_blade.modulate.a = sin(k * PI) * 0.85
+			_blade.rotation = -0.3 + k * 0.6
+			_blade.scale = _base_scale * (0.8 + k * 0.3)
 		var steps := 18
 		var outer := PackedVector2Array()
 		var inner := PackedVector2Array()
@@ -35,12 +47,18 @@ class Slash extends Node2D:
 		inner.reverse()
 		var poly := outer + inner
 		if poly.size() >= 3:
-			draw_colored_polygon(poly, Color(color.r, color.g, color.b, 0.55 * alpha))
-		draw_polyline(outer, Color(1, 1, 1, 0.85 * alpha), 3.0, true)
+			draw_colored_polygon(poly, Color(color.r, color.g, color.b, 0.18 * alpha))
+		draw_polyline(outer, Color(1, 1, 1, 0.65 * alpha), 1.8, true)
 
 
 ## Expanding shockwave ring.
 class Ring extends Node2D:
+	var _flare: Sprite2D
+	var _base_scale := Vector2.ONE
+
+	func _ready() -> void:
+		_flare = ART.stamp(self, ART.color_theme(color), 2, radius * 2.6)
+		_base_scale = _flare.scale
 	var radius := 150.0
 	var color := Color(1, 0.8, 0.4)
 	var life := 0.4
@@ -59,9 +77,12 @@ class Ring extends Node2D:
 		var k := _t / life
 		var r := radius * (0.25 + 0.75 * ease(k, 0.4))
 		var a := 1.0 - k
+		if _flare:
+			_flare.scale = _base_scale * (0.55 + 0.45 * k)
+			_flare.modulate.a = a * 0.75
 		if filled:
-			draw_circle(Vector2.ZERO, r, Color(color.r, color.g, color.b, 0.18 * a))
-		draw_arc(Vector2.ZERO, r, 0, TAU, 64, Color(color.r, color.g, color.b, 0.9 * a), width * (1.0 - k * 0.6), true)
+			draw_circle(Vector2.ZERO, r, Color(color.r, color.g, color.b, 0.04 * a))
+		draw_arc(Vector2.ZERO, r, 0, TAU, 64, Color(color.r, color.g, color.b, 0.9 * a), width * 0.38 * (1.0 - k * 0.6), true)
 
 
 ## Burst of particles drawn as shrinking dots.
@@ -182,6 +203,10 @@ class LineTelegraph extends Node2D:
 
 ## Falling star streak for the mage skill.
 class StarStreak extends Node2D:
+	var _head: Sprite2D
+
+	func _ready() -> void:
+		_head = ART.stamp(self, "mage", 2, 125)
 	var duration := 0.45
 	var _t := 0.0
 
@@ -196,6 +221,9 @@ class StarStreak extends Node2D:
 		var k := _t / duration
 		var start := Vector2(260, -900)
 		var head := start.lerp(Vector2.ZERO, k * k)
+		if _head:
+			_head.position = head
+			_head.rotation = _t * 3
 		var tail := start.lerp(Vector2.ZERO, maxf(0.0, k * k - 0.25))
 		draw_line(tail, head, Color(0.6, 0.7, 1.0, 0.5), 22.0, true)
 		draw_line(tail, head, Color(1, 1, 1, 0.9), 8.0, true)
@@ -230,110 +258,60 @@ class Afterimage extends Node2D:
 			Color(color.r, color.g, color.b, a))
 
 
-## Lightweight animated heraldry. Geometry stays crisp at every area upgrade.
-## Visual only: damage, cooldowns and enemy telegraphs are owned by gameplay.
+## Animated painted heraldry, additive so the ground and enemies remain visible.
 class Sigil extends Node2D:
 	var theme := "mage"
 	var radius := 100.0
 	var life := 0.65
 	var intensity := 1.0
 	var _t := 0.0
+	var _seal: Sprite2D
+	var _base_scale := Vector2.ONE
+
+	func _ready() -> void:
+		_seal = ART.stamp(self, theme, 0, radius * 2.35)
+		_base_scale = _seal.scale
+		_seal.modulate.a = 0
 
 	func _process(delta: float) -> void:
 		_t += delta
 		if _t >= life:
 			queue_free()
-		else:
-			queue_redraw()
+			return
+		var fade := clampf(_t / 0.12, 0, 1) * clampf((life - _t) / minf(0.5, life * 0.6), 0, 1)
+		_seal.modulate.a = fade * intensity * (0.43 if life > 1 else 0.6)
+		_seal.scale = _base_scale * (0.85 + 0.15 * minf(_t * 5, 1))
+		_seal.rotation = _t * (-0.22 if theme == "rogue" else 0.10)
+		queue_redraw()
 
 	func _draw() -> void:
-		var k := clampf(_t / life, 0.0, 1.0)
-		var fade := minf(k * 9.0, 1.0) * (1.0 - k) * intensity
-		var r := radius * (0.78 + 0.22 * sin(k * PI * 0.5))
-		var col := Color(0.6, 0.72, 1.0)
+		var k := _t / life
+		var fade := sin(PI * k) * intensity
+		var col := Color(0.68, 0.77, 1.0, fade * 0.65)
 		match theme:
-			"knight": col = Color(1.0, 0.76, 0.3)
-			"ranger": col = Color(0.55, 0.9, 0.45)
-			"rogue": col = Color(0.95, 0.16, 0.3)
-		col.a = fade
-		draw_arc(Vector2.ZERO, r, 0, TAU, 64, Color(col.r, col.g, col.b, fade * 0.2), 13.0, true)
-		draw_arc(Vector2.ZERO, r, 0, TAU, 64, col, 2.0, true)
-		draw_arc(Vector2.ZERO, r * 0.83, -_t, TAU - _t, 64, col, 1.0, true)
-		# Broken orbit and small angular runes instead of a solid opaque disk.
-		for i in 12:
-			var angle := TAU * i / 12.0 + _t * (0.45 if theme != "rogue" else -1.5)
-			var dir := Vector2.from_angle(angle)
-			var tangent := dir.orthogonal()
-			var at := dir * r * 0.92
-			draw_polyline(PackedVector2Array([at - tangent * 3.0, at + dir * 5.0,
-				at + tangent * 3.0, at - dir * 3.0]), col, 1.5, true)
-			draw_arc(Vector2.ZERO, r * 0.7, angle, angle + 0.25, 6, col, 2.0, true)
-		match theme:
-			"mage":
-				# Six-point celestial seal and orbiting stars.
-				for turn in 2:
-					var points := PackedVector2Array()
-					for i in 4:
-						points.append(Vector2.from_angle(i * TAU / 3 + turn * PI + _t * 0.2) * r * 0.63)
-					draw_polyline(points, col, 2.0, true)
-				for i in 6:
-					var at := Vector2.from_angle(i * TAU / 6 - _t) * r * 0.76
-					draw_line(at - Vector2(4, 0), at + Vector2(4, 0), col, 1.5, true)
-					draw_line(at - Vector2(0, 6), at + Vector2(0, 6), col, 1.5, true)
-			"knight":
-				# Crown, radiating mane and the central blade of judgment.
-				for i in 16:
-					var dir := Vector2.from_angle(i * TAU / 16)
-					draw_line(dir * r * 0.38, dir * r * (0.62 if i % 2 == 0 else 0.5), col, 2.5, true)
-				var crown := PackedVector2Array([Vector2(-.24, -.22), Vector2(-.3, -.48),
-					Vector2(-.1, -.37), Vector2(0, -.59), Vector2(.1, -.37),
-					Vector2(.3, -.48), Vector2(.24, -.22)])
-				for j in crown.size():
-					crown[j] *= r
-				draw_polyline(crown, col, 2.5, true)
-				draw_line(Vector2(0, -r * .22), Vector2(0, r * .5), col, 5.0, true)
-				draw_line(Vector2(-r * .16, 0), Vector2(r * .16, 0), col, 3.0, true)
-			"ranger":
-				for i in 8:
-					var dir := Vector2.from_angle(i * TAU / 8 + _t * .25)
-					var at := dir * r * .5
-					draw_line(dir * r * .22, dir * r * .67, col, 1.5, true)
-					draw_colored_polygon(PackedVector2Array([at, at + dir.orthogonal() * r * .07,
-						at + dir * r * .19, at - dir.orthogonal() * r * .07]), Color(col.r, col.g, col.b, fade * .5))
-			"rogue":
-				for i in 8:
-					var dir := Vector2.from_angle(i * TAU / 8 - _t * 1.4)
-					var side := dir.orthogonal() * r * .05
-					draw_colored_polygon(PackedVector2Array([dir * r * .22 - side,
-						dir * r * .22 + side, dir * r * .7]), col)
-		# Outward sparks, deterministic so rendering does not alter gameplay RNG.
-		for i in 18:
-			var dir := Vector2.from_angle(i * 2.39996)
-			var at := dir * r * (0.6 + k * (0.45 + (i % 3) * .1))
-			draw_line(at, at + dir * (3.0 + 9.0 * k), Color(col.r, col.g, col.b, fade * .7), 1.5, true)
+			"knight": col = Color(1, 0.8, 0.38, fade * 0.65)
+			"ranger": col = Color(0.64, 0.9, 0.46, fade * 0.65)
+			"rogue": col = Color(1, 0.22, 0.31, fade * 0.65)
+		for i in 14:
+			var dir := Vector2.from_angle(i * 2.39996 + _t * 0.15)
+			var at := dir * radius * (0.72 + k * 0.65)
+			draw_line(at, at + dir * (2 + 8 * (1 - k)), col, 1.5, true)
 
 
 ## Giant golden sword plunging from the sky (knight ultimate).
 class SwordFall extends Node2D:
 	var duration := 0.45
 	var _t := 0.0
+	var _sword: Sprite2D
+
+	func _ready() -> void:
+		_sword = ART.stamp(self, "knight", 3, 550)
 
 	func _process(delta: float) -> void:
 		_t += delta
 		if _t >= duration:
 			queue_free()
 			return
-		queue_redraw()
-
-	func _draw() -> void:
 		var k := _t / duration
-		var y := lerpf(-900.0, -40.0, k * k)
-		var gold := Color(1.0, 0.85, 0.4)
-		draw_line(Vector2(0, y - 260), Vector2(0, y), Color(1, 0.9, 0.5, 0.25), 60.0)
-		draw_colored_polygon(PackedVector2Array([
-			Vector2(-22, y - 220), Vector2(22, y - 220), Vector2(16, y - 20), Vector2(0, y + 30), Vector2(-16, y - 20)]),
-			Color(0.95, 0.95, 1.0))
-		draw_line(Vector2(0, y - 210), Vector2(0, y), Color(0.75, 0.75, 0.85), 4.0)
-		draw_rect(Rect2(-70, y - 240, 140, 22), gold)
-		draw_rect(Rect2(-12, y - 330, 24, 92), Color(0.55, 0.1, 0.12))
-		draw_circle(Vector2(0, y - 340), 18.0, gold)
+		_sword.position = Vector2(0, lerpf(-650, -170, k * k))
+		_sword.modulate.a = minf(k * 4, 1)
