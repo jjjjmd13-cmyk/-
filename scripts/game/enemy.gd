@@ -4,6 +4,7 @@ extends CharacterBody2D
 signal died(enemy)
 
 const FX := preload("res://scripts/game/fx.gd")
+const ART := preload("res://scripts/game/combat_art.gd")
 const SpriteSet := preload("res://scripts/game/sprite_set.gd")
 ## States during which sprite art plays its attack / cast animation.
 const ACTION_STATES := ["windup", "charge", "fuse", "fade", "appear", "wind", "cast", "blink", "charging"]
@@ -107,6 +108,8 @@ func _ready() -> void:
 	if sprite:
 		if elite:
 			sprite.scale *= 1.3
+		sprite.use_parent_material = false
+		sprite.material = ART.actor_material(false, elite or is_boss)
 		_visual.sprite = sprite
 		_visual.add_child(sprite)
 
@@ -417,6 +420,7 @@ class Visual extends Node2D:
 	func _process(_delta: float) -> void:
 		var e = enemy
 		if sprite:
+			(sprite.material as ShaderMaterial).set_shader_parameter("hit_flash", 1.0 if e._flash > 0 else 0.0)
 			var action: bool = ACTION_STATES.has(e._state)
 			if e._state == "intro":
 				SpriteSet.play(sprite, "idle")

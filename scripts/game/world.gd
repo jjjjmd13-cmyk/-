@@ -128,6 +128,8 @@ func _build_arena() -> void:
 	add_child(_ground)
 	_entities = Node2D.new()
 	_entities.y_sort_enabled = true
+	# Actor silhouettes remain above decorative spell art (top FX = 20).
+	_entities.z_index = 22
 	add_child(_entities)
 	_top = Node2D.new()
 	_top.z_index = 20
@@ -716,9 +718,27 @@ class ArenaFloor extends Node2D:
 	var rect: Rect2
 	var seed_value := 0
 
+	func _ready() -> void:
+		var surface := StoneSurface.new()
+		surface.rect = rect
+		add_child(surface)
+		var inlay := ArenaInlay.new()
+		inlay.rect = rect
+		add_child(inlay)
+
 	func _draw() -> void:
-		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		draw_rect(rect.grow(1200), Color(0.016, 0.025, 0.035))
+
+class StoneSurface extends Node2D:
+	var rect: Rect2
+
+	func _ready() -> void:
+		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		var mat := ShaderMaterial.new()
+		mat.shader = preload("res://assets/shaders/quiet_floor.gdshader")
+		material = mat
+
+	func _draw() -> void:
 		var ground := ART.texture("res://assets/environment/courtyard-floor.png")
 		var tile := 768.0
 		# Static batched canvas commands; texture work never runs in the physics loop.
@@ -737,28 +757,33 @@ class ArenaFloor extends Node2D:
 				draw_set_transform(clipped.position + shift, 0, mirror)
 				draw_texture_rect_region(ground, Rect2(Vector2.ZERO, clipped.size), region, Color(0.83, 0.87, 0.94))
 		draw_set_transform(Vector2.ZERO)
+
+class ArenaInlay extends Node2D:
+	var rect: Rect2
+
+	func _draw() -> void:
 		# Inlaid bronze bands and an eroded stone rose, part of the floor, not a hazard.
 		for side in [-1, 1]:
 			for off in [0, 7]:
-				draw_line(Vector2(rect.position.x, side * (425 + off)), Vector2(rect.end.x, side * (425 + off)), Color(0.35, 0.32, 0.25, 0.32), 2, true)
-				draw_line(Vector2(side * (490 + off), rect.position.y), Vector2(side * (490 + off), rect.end.y), Color(0.35, 0.32, 0.25, 0.32), 2, true)
-		draw_circle(Vector2.ZERO, 355, Color(0.025, 0.03, 0.04, 0.2))
+				draw_line(Vector2(rect.position.x, side * (425 + off)), Vector2(rect.end.x, side * (425 + off)), Color(0.35, 0.32, 0.25, 0.13), 2, true)
+				draw_line(Vector2(side * (490 + off), rect.position.y), Vector2(side * (490 + off), rect.end.y), Color(0.35, 0.32, 0.25, 0.13), 2, true)
+		draw_circle(Vector2.ZERO, 355, Color(0.025, 0.03, 0.04, 0.08))
 		for radius in [286, 299, 330, 346, 354]:
-			draw_arc(Vector2(0, 2), radius, 0, TAU, 160, Color(0.01, 0.016, 0.023, 0.48), 4, true)
-			draw_arc(Vector2.ZERO, radius, 0, TAU, 160, Color(0.45, 0.39, 0.27, 0.36), 2, true)
+			draw_arc(Vector2(0, 2), radius, 0, TAU, 160, Color(0.01, 0.016, 0.023, 0.22), 4, true)
+			draw_arc(Vector2.ZERO, radius, 0, TAU, 160, Color(0.45, 0.39, 0.27, 0.15), 2, true)
 		for i in 32:
 			var dir := Vector2.from_angle(TAU * i / 32)
 			var tangent := dir.orthogonal()
 			var at := dir * 315
-			draw_polyline(PackedVector2Array([at - tangent * 5, at + dir * 8, at + tangent * 5, at - dir * 7, at - tangent * 5]), Color(0.54, 0.46, 0.29, 0.32), 2, true)
+			draw_polyline(PackedVector2Array([at - tangent * 5, at + dir * 8, at + tangent * 5, at - dir * 7, at - tangent * 5]), Color(0.54, 0.46, 0.29, 0.13), 2, true)
 		for i in 8:
 			var a := TAU * i / 8 - PI / 2
 			var tip := Vector2.from_angle(a) * (268 if i % 2 == 0 else 225)
 			var left := Vector2.from_angle(a - 0.22) * 82
 			var right := Vector2.from_angle(a + 0.22) * 82
-			draw_colored_polygon(PackedVector2Array([Vector2.ZERO, left, tip]), Color(0.45, 0.41, 0.32, 0.15))
-			draw_colored_polygon(PackedVector2Array([Vector2.ZERO, right, tip]), Color(0.02, 0.025, 0.035, 0.22))
-			draw_line(left, tip, Color(0.62, 0.53, 0.34, 0.27), 1.3, true)
+			draw_colored_polygon(PackedVector2Array([Vector2.ZERO, left, tip]), Color(0.45, 0.41, 0.32, 0.06))
+			draw_colored_polygon(PackedVector2Array([Vector2.ZERO, right, tip]), Color(0.02, 0.025, 0.035, 0.09))
+			draw_line(left, tip, Color(0.62, 0.53, 0.34, 0.12), 1.3, true)
 		# A raised, beveled perimeter with regular stone buttresses.
 		for inset in [0, 8, 22, 50, 64]:
 			var col := Color(0.18, 0.2, 0.22) if inset % 2 == 0 else Color(0.32, 0.3, 0.26)
@@ -789,7 +814,7 @@ class Pillar extends StaticBody2D:
 		draw_set_transform(Vector2.ZERO)
 		var tex := ART.prop(3 if relic else (1 if broken else 0))
 		var width := 230.0 if relic else 210.0
-		draw_texture_rect(tex, Rect2(-width / 2, -width * 0.86, width, width), false, Color(0.79, 0.83, 0.89))
+		draw_texture_rect(tex, Rect2(-width / 2, -width * 0.86, width, width), false, Color(0.68, 0.72, 0.78))
 
 class Brazier extends Node2D:
 	var _t := 0.0
@@ -822,8 +847,8 @@ class CourtyardAir extends Node2D:
 
 	func _draw() -> void:
 		# Deterministic motes: visual animation never consumes the gameplay RNG.
-		for i in 70:
+		for i in 40:
 			var x := sin(i * 73.17) * 1600 + sin(_t * 0.12 + i) * 24
 			var y := fposmod(sin(i * 31.13) * 1300 - _t * (5 + i % 7), 2600) - 1300
-			var alpha := 0.08 + 0.12 * (0.5 + 0.5 * sin(_t * 0.7 + i))
+			var alpha := 0.03 + 0.05 * (0.5 + 0.5 * sin(_t * 0.7 + i))
 			draw_circle(Vector2(x, y), 1 + i % 2, Color(0.76, 0.84, 0.9, alpha))

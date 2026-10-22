@@ -33,7 +33,7 @@ class GravityWell extends Node2D:
 				world.player_hit_enemy(e, dmg_mult, Vector2.ZERO)
 		if _vortex:
 			_vortex.rotation = -_t * 0.65
-			_vortex.modulate.a = minf(_t * 4, 0.5) * clampf((duration - _t) / 0.4, 0, 1)
+			_vortex.modulate.a = minf(_t * 4, 0.38) * clampf((duration - _t) / 0.4, 0, 1)
 		queue_redraw()
 
 	func _draw() -> void:
@@ -152,7 +152,7 @@ class Smoke extends Node2D:
 	func _draw() -> void:
 		var fade := clampf((duration - _t) / 0.8, 0.0, 1.0) * clampf(_t / 0.15, 0.0, 1.0)
 		if _mist:
-			_mist.modulate.a = 0.38 * fade
+			_mist.modulate.a = 0.28 * fade
 			_mist.rotation = _t * 0.3
 		for p in _puffs:
 			var drift := Vector2(sin(_t * 1.5 + p.s) * 10.0, -_t * 14.0)

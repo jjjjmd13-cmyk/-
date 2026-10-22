@@ -13,6 +13,9 @@ var _t := 0.0
 
 
 func _ready() -> void:
+	# Keep the latest enlarged cyan arrows above friendly spells and warnings.
+	z_as_relative = false
+	z_index = 40
 	if kind == "void_orb":
 		life = 6.0
 

@@ -123,6 +123,9 @@ func _ready() -> void:
 	# Always draw the hero above enemies so it never gets lost in a crowd.
 	z_index = 1
 	add_child(_visual)
+	var locator := HeroVisual.Locator.new()
+	locator.actor = self
+	add_child(locator)
 
 
 func _input(event: InputEvent) -> void:
@@ -444,6 +447,7 @@ func _starfall(target: Vector2, r: float, mult: float) -> void:
 	streak.position = target
 	world.add_top_fx(streak)
 	var tel = FX.Telegraph.new()
+	tel.hostile = false
 	tel.radius = r
 	tel.duration = 0.45
 	tel.color = Color(0.5, 0.6, 1.0)

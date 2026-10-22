@@ -48,9 +48,19 @@ static func stamp(parent: Node2D, hero: String, kind: int, diameter: float) -> S
 	sprite.texture = vfx(hero, kind)
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	sprite.material = _additive
+	# Painted spell layers yield to actors and enemy warning boundaries.
+	sprite.self_modulate.a = 0.72
 	sprite.scale = Vector2.ONE * diameter / sprite.texture.get_width()
 	parent.add_child(sprite)
 	return sprite
+
+static func actor_material(player: bool, elite := false) -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://assets/shaders/actor_readability.gdshader")
+	mat.set_shader_parameter("rim_color", Color(0.62, 0.94, 1, 0.95) if player else (Color(1, 0.52, 0.24, 0.8) if elite else Color(0.9, 0.5, 0.34, 0.48)))
+	mat.set_shader_parameter("rim_width", 2.8 if player else 2.0)
+	mat.set_shader_parameter("exposure", 1.12 if player else 1.08)
+	return mat
 
 static func release_cache() -> void:
 	_cells.clear()

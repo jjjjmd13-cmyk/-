@@ -29,6 +29,7 @@ const PALETTES := {
 	},
 }
 const OUTLINE := Color(0.05, 0.03, 0.03, 0.9)
+const ART := preload("res://scripts/game/combat_art.gd")
 const SpriteSet := preload("res://scripts/game/sprite_set.gd")
 
 var hero_id := "knight"
@@ -65,6 +66,7 @@ func _ready() -> void:
 	_sprite = SpriteSet.make_sprite("heroes", hero_id)
 	if _sprite:
 		_sprite.use_parent_material = false
+		_sprite.material = ART.actor_material(true)
 		add_child(_sprite)
 
 
@@ -83,7 +85,7 @@ func _process(delta: float) -> void:
 
 func _update_sprite() -> void:
 	_sprite.flip_h = facing < 0.0
-	_sprite.material = Game.flash_material() if flash > 0.35 else null
+	(_sprite.material as ShaderMaterial).set_shader_parameter("hit_flash", 1.0 if flash > 0.35 else 0.0)
 	if dead:
 		SpriteSet.play(_sprite, "death")
 		return
@@ -118,9 +120,6 @@ func _draw() -> void:
 	# Shadow.
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 0.35))
 	draw_circle(Vector2.ZERO, 26.0, Color(0, 0, 0, 0.35))
-	if ring_color.a > 0.0:
-		var pulse := 0.75 + 0.25 * sin(time * 4.0)
-		draw_arc(Vector2.ZERO, 34.0, 0, TAU, 40, Color(ring_color.r, ring_color.g, ring_color.b, 0.85 * pulse), 4.0, true)
 	draw_set_transform(Vector2.ZERO)
 	if shield_frac > 0.01:
 		var c := Vector2(0, -52)
@@ -486,3 +485,22 @@ func _bow(hand: Vector2, ang: float, draw_k: float) -> void:
 		draw_colored_polygon(PackedVector2Array([
 			Vector2(pull + 46, -3), Vector2(pull + 54, 0), Vector2(pull + 46, 3)]), _c(Color(0.8, 0.8, 0.85)))
 	draw_set_transform(Vector2.ZERO)
+
+
+## The local player's locator stays legible while the sprite is in stealth.
+class Locator extends Node2D:
+	var actor: Node
+
+	func _ready() -> void:
+		z_as_relative = false
+		z_index = 36
+
+	func _process(_delta: float) -> void:
+		visible = is_instance_valid(actor) and not actor.dead
+		queue_redraw()
+
+	func _draw() -> void:
+		draw_set_transform(Vector2.ZERO, 0, Vector2(1, 0.35))
+		draw_arc(Vector2.ZERO, 34, 0, TAU, 48, Color(0.01, 0.025, 0.04, 0.95), 8, true)
+		draw_arc(Vector2.ZERO, 34, 0, TAU, 48, Color(0.68, 0.94, 1, 0.95), 2.5, true)
+		draw_set_transform(Vector2.ZERO)

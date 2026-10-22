@@ -143,7 +143,7 @@ func _danger(p: Node2D) -> Vector2:
 	var out := Vector2.ZERO
 	var pos := p.global_position
 	for c in _world._ground.get_children():
-		if c is FX.Telegraph:
+		if c is FX.Telegraph and c.hostile:
 			var d: Vector2 = pos - c.global_position
 			if d.length() < c.radius + 40.0:
 				out += d.normalized() * (1.0 + (c.radius + 40.0 - d.length()) / c.radius)
