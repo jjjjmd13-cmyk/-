@@ -13,7 +13,9 @@ var _resume_button: Button
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Controls under a CanvasLayer do not inherit the window theme.
+	theme = Game.theme
 	_build()
 	Game.language_changed.connect(_build)
 

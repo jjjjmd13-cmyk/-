@@ -11,7 +11,8 @@ func _ready() -> void:
 	layer = 5
 	_canvas = HudCanvas.new()
 	_canvas.world = world
-	_canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_canvas.theme = Game.theme
 	_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var d: Dictionary = HEROES.DATA[Game.selected_hero]
 	_canvas.portrait = load(d.portrait)

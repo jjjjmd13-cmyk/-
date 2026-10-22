@@ -16,7 +16,9 @@ var _done := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Controls under a CanvasLayer do not inherit the window theme.
+	theme = Game.theme
 	add_child(UI.dim_background(0.65))
 	var center := UI.full_center()
 	add_child(center)
@@ -66,7 +68,7 @@ func _card(id: String, new_level: int, hotkey: int) -> Button:
 		if not b.disabled:
 			b.grab_focus())
 	var v := VBoxContainer.new()
-	v.set_anchors_preset(Control.PRESET_FULL_RECT)
+	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	v.offset_left = 24
 	v.offset_right = -24
 	v.offset_top = 22

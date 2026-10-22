@@ -21,11 +21,13 @@ var _started := false
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Controls under a CanvasLayer do not inherit the window theme.
+	theme = Game.theme
 	add_child(MenuBackground.new())
 
 	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.offset_left = 60
 	root.offset_right = -60
 	root.offset_top = 36
@@ -130,14 +132,14 @@ func _make_card(id: String) -> Button:
 	tr.texture = load(d.portrait)
 	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	tr.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	tr.offset_top = 10
 	tr.offset_bottom = -64
 	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(tr)
 	var name_l := UI.label(Game.t(d.name), 32, Game.COLOR_TEXT, true)
 	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_l.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	name_l.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	name_l.offset_top = -60
 	name_l.offset_bottom = -12
 	name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE

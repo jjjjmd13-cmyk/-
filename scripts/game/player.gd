@@ -39,6 +39,8 @@ var venom := 0
 var thorns := 0
 var cleave := 0
 var upgrades := {}
+## Damage taken per source kind, for the end-of-run summary and balancing.
+var damage_log := {}
 
 var level := 1
 var xp := 0
@@ -73,6 +75,7 @@ func setup(p_hero: String, p_world: Node) -> void:
 	attack_cd = data.attack_cd
 	crit_chance = data.crit
 	armor = data.armor
+	lifesteal = data.get("lifesteal", 0.0)
 	skill_cd = data.skill_cd
 	dash_cd = data.dash_cd
 
@@ -88,6 +91,9 @@ func _ready() -> void:
 	add_child(shape)
 	_visual = HeroVisual.new()
 	_visual.hero_id = hero_id
+	_visual.ring_color = data.accent.lightened(0.2)
+	# Always draw the hero above enemies so it never gets lost in a crowd.
+	z_index = 1
 	add_child(_visual)
 
 
@@ -343,6 +349,10 @@ func take_damage(amount: float, source: Node) -> bool:
 		return false
 	var final := amount * (1.0 - clampf(armor, 0.0, 0.7))
 	hp -= final
+	var src_kind := "unknown"
+	if is_instance_valid(source) and "kind" in source:
+		src_kind = str(source.kind)
+	damage_log[src_kind] = float(damage_log.get(src_kind, 0.0)) + final
 	_invuln = HIT_INVULN
 	_visual.flash = 1.0
 	Audio.play("hurt")

@@ -4,6 +4,8 @@ extends Node
 ##   godot --headless --fixed-fps 60 res://tests/autoplay.tscn -- [hero] [max_minutes]
 
 const MainScene := preload("res://scenes/main.tscn")
+const FX := preload("res://scripts/game/fx.gd")
+const EnemyProjectile := preload("res://scripts/game/enemy_projectile.gd")
 
 var _main: Node
 var _heroes: Array = []
@@ -14,6 +16,8 @@ var _frame := 0
 var _results: Array = []
 var _phase := "boot"
 var _wait := 0
+var _last_wave := 0
+var _wave_start := 0.0
 
 
 func _ready() -> void:
@@ -45,13 +49,16 @@ func _start_next() -> void:
 		print("=== RESULTS ===")
 		for r in _results:
 			print(r)
-		get_tree().quit()
+		_phase = "done"
+		Game.quit_game()
 		return
 	Game.selected_hero = _heroes[_hero_idx]
 	_hero_idx += 1
 	_main.start_run()
 	_world = _main._current
 	_phase = "run"
+	_last_wave = 0
+	_wave_start = 0.0
 	print("--- run: ", Game.selected_hero)
 
 
@@ -61,9 +68,12 @@ func _drive() -> void:
 	var p: Node = _world.player
 	# Finished?
 	if _world._ended or _world.run_time > _max_time:
-		var rec := "%s: %s wave=%d level=%d kills=%d time=%.0fs hp=%.0f/%.0f upgrades=%s" % [
+		var dmg := {}
+		for k in p.damage_log:
+			dmg[k] = roundi(p.damage_log[k])
+		var rec := "%s: %s wave=%d level=%d kills=%d time=%.0fs hp=%.0f/%.0f\n    upgrades=%s\n    damage_taken=%s" % [
 			p.hero_id, "WIN" if (_world._ended and not p.dead) else ("DEAD" if p.dead else "TIMEOUT"),
-			_world.wave, p.level, _world.kills, _world.run_time, p.hp, p.max_hp, str(p.upgrades)]
+			_world.wave, p.level, _world.kills, _world.run_time, p.hp, p.max_hp, str(p.upgrades), str(dmg)]
 		print(rec)
 		_results.append(rec)
 		_release_all()
@@ -89,10 +99,25 @@ func _drive() -> void:
 		away += d.normalized() * (360.0 - d.length()) / 360.0
 	var orbit: Vector2 = (-p.global_position).orthogonal().normalized() * 0.6 + (-p.global_position) * 0.0006
 	var dir := (away * 1.4 + orbit)
-	if p.data.attack_kind == "melee" and away.length() < 1.6:
+	var danger := _danger(p)
+	if p.data.attack_kind == "melee":
+		# Fight at the edge of the crowd: engage the nearest enemy, back off when swarmed.
+		var crowd: int = _world.enemies_in_radius(p.global_position, 170.0).size()
 		var target: Node2D = _world.nearest_enemy(p.global_position, 900.0)
-		if target and target.global_position.distance_to(p.global_position) > 70.0:
-			dir = (target.global_position - p.global_position).normalized() + away
+		if target and crowd < 4 and p.hp > p.max_hp * 0.3:
+			var to: Vector2 = target.global_position - p.global_position
+			dir = to.normalized() * (1.0 if to.length() > p.data.melee_range * 0.7 else -0.3) + away * 0.5
+	if _world.wave != _last_wave:
+		print("  wave %d reached at t=%.0f (prev took %.0fs) lvl=%d hp=%.0f/%.0f" % [
+			_world.wave, _world.run_time, _world.run_time - _wave_start, p.level, p.hp, p.max_hp])
+		_last_wave = _world.wave
+		_wave_start = _world.run_time
+	# Dodging telegraphed attacks and projectiles overrides everything else.
+	if danger.length() > 0.1:
+		dir = danger.normalized() * 2.0 + dir * 0.3
+		if danger.length() > 1.0 and p.dash_timer <= 0.0:
+			_set_move(dir.normalized())
+			_tap("dash")
 	for pick in _world.get_tree().get_nodes_in_group("pickups"):
 		var to: Vector2 = pick.global_position - p.global_position
 		if to.length() < 400.0:
@@ -108,6 +133,32 @@ func _drive() -> void:
 		print("  t=%.0f wave=%d lvl=%d hp=%.0f/%.0f enemies=%d kills=%d fps=%d nodes=%d" % [
 			_world.run_time, _world.wave, p.level, p.hp, p.max_hp, _world.enemies.size(), _world.kills,
 			Engine.get_frames_per_second(), get_tree().get_node_count()])
+
+
+func _danger(p: Node2D) -> Vector2:
+	## Direction away from incoming telegraphs and projectiles, scaled by urgency.
+	var out := Vector2.ZERO
+	var pos := p.global_position
+	for c in _world._ground.get_children():
+		if c is FX.Telegraph:
+			var d: Vector2 = pos - c.global_position
+			if d.length() < c.radius + 40.0:
+				out += d.normalized() * (1.0 + (c.radius + 40.0 - d.length()) / c.radius)
+		elif c is FX.LineTelegraph:
+			var local: Vector2 = (pos - c.global_position).rotated(-c.rotation)
+			if local.x > -40.0 and local.x < c.length + 40.0 and absf(local.y) < c.width:
+				var side := Vector2(0, 1.0 if local.y >= 0.0 else -1.0).rotated(c.rotation)
+				out += side * 1.5
+	for c in _world._top.get_children():
+		if c is EnemyProjectile:
+			var rel: Vector2 = pos + Vector2(0, -40) - c.global_position
+			var v: Vector2 = c.velocity
+			if rel.length() > 260.0 or v.dot(rel) <= 0.0:
+				continue
+			var perp := rel - v.normalized() * rel.dot(v.normalized())
+			if perp.length() < 50.0:
+				out += (perp.normalized() if perp.length() > 1.0 else v.orthogonal().normalized()) * 0.8
+	return out
 
 
 func _set_move(v: Vector2) -> void:

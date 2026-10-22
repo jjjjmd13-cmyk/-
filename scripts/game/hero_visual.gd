@@ -42,6 +42,8 @@ var flash := 0.0
 var dashing := false
 var invuln_blink := false
 var time := 0.0
+## Colour of the ring under the hero's feet that keeps them visible in crowds.
+var ring_color := Color(0, 0, 0, 0)
 
 var _p: Dictionary
 
@@ -74,6 +76,9 @@ func _draw() -> void:
 	# Shadow.
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 0.35))
 	draw_circle(Vector2.ZERO, 26.0, Color(0, 0, 0, 0.35))
+	if ring_color.a > 0.0:
+		var pulse := 0.75 + 0.25 * sin(time * 4.0)
+		draw_arc(Vector2.ZERO, 34.0, 0, TAU, 40, Color(ring_color.r, ring_color.g, ring_color.b, 0.85 * pulse), 4.0, true)
 	draw_set_transform(Vector2.ZERO)
 
 	var aim_dir := Vector2.from_angle(aim_angle)

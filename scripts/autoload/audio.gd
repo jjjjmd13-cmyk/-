@@ -42,6 +42,17 @@ func _ready() -> void:
 	_music_b = _make_music_player()
 
 
+func shutdown() -> void:
+	## Stops every player and drops stream references (called before quitting).
+	_current_music = ""
+	if _music_tween:
+		_music_tween.kill()
+	for c in get_children():
+		if c is AudioStreamPlayer:
+			c.stop()
+			c.stream = null
+
+
 func _make_music_player() -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
 	p.bus = "Music"

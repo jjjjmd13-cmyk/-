@@ -37,7 +37,7 @@ static func title(text: String, size: int = 72) -> Label:
 static func dim_background(alpha: float = 0.72) -> ColorRect:
 	var c := ColorRect.new()
 	c.color = Color(0.02, 0.01, 0.015, alpha)
-	c.set_anchors_preset(Control.PRESET_FULL_RECT)
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	c.mouse_filter = Control.MOUSE_FILTER_STOP
 	return c
 
@@ -51,7 +51,7 @@ static func centered_column(separation: int = 18) -> VBoxContainer:
 
 static func full_center() -> CenterContainer:
 	var c := CenterContainer.new()
-	c.set_anchors_preset(Control.PRESET_FULL_RECT)
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	return c
 
 

@@ -9,14 +9,12 @@ const KINDS := {
 	"ghoul": {"hp": 30.0, "speed": 108.0, "damage": 10.0, "radius": 17.0, "xp": 1},
 	"bat": {"hp": 13.0, "speed": 170.0, "damage": 6.0, "radius": 12.0, "xp": 1},
 	"archer": {"hp": 26.0, "speed": 96.0, "damage": 9.0, "radius": 16.0, "xp": 2,
-		"range": 400.0, "shot_cd": 2.4},
+		"range": 400.0, "shot_cd": 2.8},
 	"brute": {"hp": 135.0, "speed": 72.0, "damage": 20.0, "radius": 27.0, "xp": 6},
 	"cultist": {"hp": 44.0, "speed": 82.0, "damage": 12.0, "radius": 17.0, "xp": 3,
 		"range": 440.0, "shot_cd": 3.2},
 	"boss": {"hp": 1500.0, "speed": 100.0, "damage": 24.0, "radius": 46.0, "xp": 80},
 }
-
-static var _flash_material: ShaderMaterial
 
 var kind := "ghoul"
 var world: Node
@@ -77,11 +75,6 @@ func _ready() -> void:
 	_visual = Visual.new()
 	_visual.enemy = self
 	add_child(_visual)
-	if _flash_material == null:
-		var sh := Shader.new()
-		sh.code = "shader_type canvas_item;\nvoid fragment() { COLOR = vec4(mix(COLOR.rgb, vec3(1.0), 0.85), COLOR.a); }"
-		_flash_material = ShaderMaterial.new()
-		_flash_material.shader = sh
 	if kind == "boss":
 		_state = "intro"
 		_state_t = 1.2
@@ -138,7 +131,8 @@ func _physics_process(delta: float) -> void:
 	# Contact damage.
 	if dist < radius + 20.0 and contact_cd <= 0.0 and stun <= 0.0:
 		contact_cd = 0.9
-		player.take_damage(damage, self)
+		# The boss's real threats are its telegraphed attacks; touching it hurts less.
+		player.take_damage(damage * (0.55 if kind == "boss" else 1.0), self)
 
 	if absf(to_player.x) > 4.0:
 		_visual.scale.x = signf(to_player.x)
@@ -151,7 +145,7 @@ func _ranged_ai(to_player: Vector2, dist: float, delta: float) -> Vector2:
 	if _shot_cd <= 0.0 and dist < d.range + 80.0:
 		_shot_cd = d.shot_cd * randf_range(0.85, 1.15)
 		if kind == "archer":
-			world.spawn_enemy_projectile(global_position + Vector2(0, -30), dir * 420.0, damage, "arrow")
+			world.spawn_enemy_projectile(global_position + Vector2(0, -30), dir * 330.0, damage, "arrow")
 		else:
 			world.spawn_enemy_projectile(global_position + Vector2(0, -40), dir * 210.0, damage, "orb")
 	# Keep at preferred range, strafing slightly.
@@ -302,7 +296,7 @@ func _do_burst(offset: float) -> void:
 	var count := 20 if _boss_phase == 2 else 16
 	for i in count:
 		var dir := Vector2.from_angle(offset + TAU * i / count)
-		world.spawn_enemy_projectile(global_position + Vector2(0, -50) + dir * 30.0, dir * 260.0, damage * 0.8, "orb_fast")
+		world.spawn_enemy_projectile(global_position + Vector2(0, -50) + dir * 30.0, dir * 250.0, damage * 0.6, "orb_fast")
 
 
 func hit(amount: float, knock: Vector2) -> void:
@@ -315,7 +309,7 @@ func hit(amount: float, knock: Vector2) -> void:
 		knock *= 0.5
 	knockback += knock
 	_flash = 0.07
-	_visual.material = _flash_material
+	_visual.material = Game.flash_material()
 
 
 func apply_bleed(dps: float) -> void:

@@ -13,7 +13,9 @@ var _focus_after_popup: Button
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Controls under a CanvasLayer do not inherit the window theme.
+	theme = Game.theme
 	Game.language_changed.connect(_build)
 	_build()
 	Audio.play_music("menu")
@@ -29,7 +31,7 @@ func _build() -> void:
 
 	# Hero line-up on the right.
 	var lineup := Control.new()
-	lineup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lineup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	lineup.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(lineup)
 	move_child(lineup, 1)
@@ -75,16 +77,18 @@ func _build() -> void:
 		UI.button(Game.t("menu_credits"), func() -> void: _open_text(Game.t("credits_title"), Game.t("credits_body"))),
 	]
 	if OS.get_name() != "Web":
-		buttons.append(UI.button(Game.t("menu_quit"), func() -> void: get_tree().quit()))
+		buttons.append(UI.button(Game.t("menu_quit"), func() -> void: Game.quit_game()))
 	for b in buttons:
 		b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		left.add_child(b)
 
 	var ver := UI.label("v" + str(ProjectSettings.get_setting("application/config/version", "1.0.0")), 20, Game.COLOR_DIM)
-	ver.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	ver.position = Vector2(-120, -46)
-	ver.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	ver.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	ver.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	ver.offset_left = -160
+	ver.offset_top = -50
+	ver.offset_right = -24
+	ver.offset_bottom = -16
+	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(ver)
 	if _popup == null:
 		start.grab_focus.call_deferred()
@@ -102,7 +106,7 @@ func _open_settings() -> void:
 
 func _open_text(title_text: String, body: String) -> void:
 	var root := Control.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(UI.dim_background(0.8))
 	var center := UI.full_center()
 	root.add_child(center)

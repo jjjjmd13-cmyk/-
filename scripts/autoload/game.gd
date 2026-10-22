@@ -31,10 +31,13 @@ var records := {}
 var font: Font
 var font_bold: Font
 var theme: Theme
+var _flash_material: ShaderMaterial
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Route window closing through quit_game() so audio is released cleanly.
+	get_tree().auto_accept_quit = false
 	_setup_input()
 	_load()
 	if settings.language == "":
@@ -53,6 +56,16 @@ func _ensure_buses() -> void:
 		var idx := AudioServer.bus_count - 1
 		AudioServer.set_bus_name(idx, bus_name)
 		AudioServer.set_bus_send(idx, "Master")
+
+
+## Shared white-flash material used when enemies are hit.
+func flash_material() -> ShaderMaterial:
+	if _flash_material == null:
+		var sh := Shader.new()
+		sh.code = "shader_type canvas_item;\nvoid fragment() { COLOR = vec4(mix(COLOR.rgb, vec3(1.0), 0.6), COLOR.a); }"
+		_flash_material = ShaderMaterial.new()
+		_flash_material.shader = sh
+	return _flash_material
 
 
 # --------------------------------------------------------------- localization
@@ -89,6 +102,20 @@ func _set_bus_volume(bus_name: String, value: float) -> void:
 		return
 	AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(value, 0.0001)))
 	AudioServer.set_bus_mute(idx, value <= 0.001)
+
+
+func quit_game() -> void:
+	save()
+	Audio.shutdown()
+	# Give the audio thread a moment to drop its playbacks before exiting.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	get_tree().quit()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		quit_game()
 
 
 func toggle_fullscreen() -> void:
@@ -219,12 +246,15 @@ func _axis(axis: JoyAxis, value: float) -> InputEventJoypadMotion:
 # --------------------------------------------------------------- theme
 func _build_theme() -> void:
 	var base: FontFile = load("res://assets/fonts/NotoSansKR.ttf")
+	# The font is variable; its default instance is the thinnest weight, so set
+	# the weight axis explicitly (keyed by OpenType tag).
+	var wght := TextServerManager.get_primary_interface().name_to_tag("wght")
 	var regular := FontVariation.new()
 	regular.base_font = base
-	regular.variation_opentype = {"wght": 500}
+	regular.variation_opentype = {wght: 500}
 	var bold := FontVariation.new()
 	bold.base_font = base
-	bold.variation_opentype = {"wght": 800}
+	bold.variation_opentype = {wght: 800}
 	font = regular
 	font_bold = bold
 

@@ -61,6 +61,8 @@ func _ready() -> void:
 	_camera = Camera2D.new()
 	_camera.position_smoothing_enabled = true
 	_camera.position_smoothing_speed = 7.0
+	# Slight zoom so the heroes read clearly on large screens.
+	_camera.zoom = Vector2(1.2, 1.2)
 	_camera.limit_left = int(ARENA.position.x - 220)
 	_camera.limit_top = int(ARENA.position.y - 260)
 	_camera.limit_right = int(ARENA.end.x + 220)
@@ -74,7 +76,7 @@ func _ready() -> void:
 	vig_layer.layer = 1
 	add_child(vig_layer)
 	_vignette = ColorRect.new()
-	_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_vignette.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var sh := Shader.new()
 	sh.code = """shader_type canvas_item;
@@ -225,7 +227,7 @@ func _start_wave(n: int) -> void:
 	wave = n
 	wave_time = 0.0
 	state = "fighting"
-	wave_duration = 34.0 + wave * 2.0
+	wave_duration = 30.0 + wave * 1.5
 	_spawn_t = 0.5
 	if BOSS_WAVES.has(wave):
 		_hud.show_banner(Game.t("wave_banner") % wave, Game.t("boss_banner"))
@@ -252,8 +254,9 @@ func _spawn_group() -> void:
 	var interval := maxf(0.25, 1.05 - 0.055 * wave)
 	var cap := mini(50 + wave * 9, MAX_ENEMIES)
 	if boss_alive:
-		interval *= 2.5
-		cap = 30 + wave * 2
+		# Fewer adds during boss fights so the duel stays the focus.
+		interval *= 3.0
+		cap = 12 + wave
 	_spawn_t = interval
 	if enemies.size() >= cap:
 		return
@@ -322,8 +325,8 @@ func _spawn_boss() -> void:
 		pos = player.global_position + Vector2(0, 520)
 	boss = spawn_enemy_at("boss", pos)
 	# Bosses scale less steeply than the horde so fights stay reasonable.
-	var mult := 1.0 + 0.9 * float(BOSS_WAVES.find(wave))
-	boss.max_hp = Enemy.KINDS.boss.hp * mult * (1.0 + 0.08 * wave)
+	var mult := 1.0 + 0.6 * float(BOSS_WAVES.find(wave))
+	boss.max_hp = Enemy.KINDS.boss.hp * mult * (1.0 + 0.05 * wave)
 	boss.hp = boss.max_hp
 	shake(10.0)
 
