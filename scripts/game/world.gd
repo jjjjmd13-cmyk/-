@@ -254,7 +254,7 @@ func is_boss_wave(w: int) -> bool:
 
 func _hp_mult() -> float:
 	var w := float(wave - 1)
-	return (1.0 + 0.16 * w + 0.012 * w * w) * float(Game.DIFFICULTY[Game.difficulty].hp)
+	return (1.0 + 0.18 * w + 0.013 * w * w) * float(Game.DIFFICULTY[Game.difficulty].hp)
 
 
 func _dmg_mult() -> float:
@@ -358,7 +358,7 @@ func _spawn_boss() -> void:
 	boss = spawn_enemy_at(kind, pos)
 	# Bosses scale less steeply than the horde so fights stay reasonable.
 	var mult := 1.0 + 0.6 * float(wave / BOSS_EVERY - 1)
-	boss.max_hp = Boss.BOSSES[kind].hp * mult * (1.0 + 0.05 * wave) * float(Game.DIFFICULTY[Game.difficulty].hp)
+	boss.max_hp = Boss.BOSSES[kind].hp * 1.15 * mult * (1.0 + 0.05 * wave) * float(Game.DIFFICULTY[Game.difficulty].hp)
 	boss.hp = boss.max_hp
 	shake(10.0)
 

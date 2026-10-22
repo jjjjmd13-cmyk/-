@@ -41,7 +41,7 @@ const DATA := {
 		"ult": "hero_mage_ult",
 		"portrait": "res://assets/portraits/mage.png",
 		"accent": Color(0.42, 0.5, 1.0),
-		"max_hp": 95.0,
+		"max_hp": 105.0,
 		"speed": 225.0,
 		"damage": 17.0,
 		"attack_cd": 0.48,
