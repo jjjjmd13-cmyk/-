@@ -50,6 +50,7 @@ var action_anim := "attack"
 ## Seconds the current attack animation should last (sprite art is retimed to fit).
 var action_len := 0.25
 var dead := false
+var stealth_alpha := 1.0
 
 var _p: Dictionary
 ## Sprite-sheet art, when the hero has some (otherwise the hero is drawn in code).
@@ -61,6 +62,7 @@ func _ready() -> void:
 	_p = PALETTES[hero_id]
 	_sprite = SpriteSet.make_sprite("heroes", hero_id)
 	if _sprite:
+		_sprite.use_parent_material = false
 		add_child(_sprite)
 
 
@@ -107,9 +109,9 @@ func _draw() -> void:
 	if _p.is_empty():
 		_p = PALETTES[hero_id]
 	if invuln_blink and int(time * 20.0) % 2 == 0:
-		modulate.a = 0.45
+		modulate.a = 0.45 * stealth_alpha
 	else:
-		modulate.a = 1.0
+		modulate.a = stealth_alpha
 	var bob := absf(sin(walk_phase)) * -3.0 if moving else sin(time * 2.2) * 1.0
 	# Shadow.
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1, 0.35))

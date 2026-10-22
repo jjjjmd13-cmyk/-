@@ -153,9 +153,7 @@ func _physics_process(delta: float) -> void:
 		_afterimage_t -= delta
 		if _afterimage_t <= 0.0:
 			_afterimage_t = 0.03
-			var ai = FX.Afterimage.new()
-			ai.color = data.accent
-			ai.position = global_position
+			var ai = _afterimage(global_position, data.accent)
 			world.add_ground_fx(ai)
 		if shadowstep > 0:
 			_shadowstep_hits()
@@ -181,7 +179,7 @@ func _physics_process(delta: float) -> void:
 	_visual.attack_t = _attack_anim
 	_visual.action_len = _attack_anim_len
 	_visual.dashing = _dash_t > 0.0 or _charge_t > 0.0 or _dance_left > 0
-	_visual.modulate.a = 0.45 if _hidden_t > 0.0 else 1.0
+	_visual.stealth_alpha = 0.45 if _hidden_t > 0.0 else 1.0
 	_visual.aim_angle = aim_dir.angle()
 	_visual.moving = velocity.length() > 10.0
 	_visual.invuln_blink = _invuln > 0.0 and _dash_t <= 0.0
@@ -325,6 +323,7 @@ func _use_skill(slot: String) -> void:
 	_attack_anim_len = 0.3
 	if slot == "ult":
 		world.shake(6.0)
+	_sigil(global_position, 100.0 if slot != "ult" else 155.0, 0.65)
 	call("_%s_%s" % [hero_id, slot])
 
 
@@ -384,9 +383,7 @@ func _blade_dance(delta: float) -> void:
 		side = Vector2.LEFT
 	global_position = world.clamp_to_arena(target.global_position + side * 40.0)
 	aim_dir = (target.global_position - global_position).normalized()
-	var ai = FX.Afterimage.new()
-	ai.color = data.accent
-	ai.position = from
+	var ai = _afterimage(from, data.accent)
 	world.add_ground_fx(ai)
 	var slash = FX.Slash.new()
 	slash.radius = 60.0
@@ -412,6 +409,7 @@ func _mage_skill2() -> void:
 	well.radius = 190.0 * area_mult
 	well.position = aim_point(560.0)
 	world.add_ground_fx(well)
+	_sigil(well.position, well.radius, well.duration)
 
 
 func _mage_ult() -> void:
@@ -427,6 +425,7 @@ func _mage_ult() -> void:
 
 
 func _starfall(target: Vector2, r: float, mult: float) -> void:
+	_sigil(target, r, 0.85)
 	var streak = FX.StarStreak.new()
 	streak.position = target
 	world.add_top_fx(streak)
@@ -454,6 +453,7 @@ func _ranger_skill2() -> void:
 	snare.radius = 130.0 * area_mult
 	snare.position = global_position
 	world.add_ground_fx(snare)
+	_sigil(snare.position, snare.radius, snare.duration)
 	_dash_dir = -aim_dir
 	_dash_t = DASH_TIME * 1.3
 	_invuln = maxf(_invuln, _dash_t + 0.1)
@@ -469,6 +469,7 @@ func _ranger_ult() -> void:
 	rain.radius = 230.0 * area_mult
 	rain.position = aim_point(600.0)
 	world.add_ground_fx(rain)
+	_sigil(rain.position, rain.radius, rain.duration)
 	Audio.play("knives", 0.0, 0.0)
 
 
@@ -500,9 +501,7 @@ func _shield_charge(delta: float) -> void:
 	_afterimage_t -= delta
 	if _afterimage_t <= 0.0:
 		_afterimage_t = 0.03
-		var ai = FX.Afterimage.new()
-		ai.color = Color(1, 0.85, 0.45)
-		ai.position = global_position
+		var ai = _afterimage(global_position, Color(1, 0.85, 0.45))
 		world.add_ground_fx(ai)
 	for e in world.enemies_in_radius(global_position, 70.0 * area_mult):
 		if _charge_hits.has(e):
@@ -657,3 +656,25 @@ func apply_upgrade(id: String) -> void:
 		"cleave": cleave += 1
 		"elixir": heal(max_hp * 0.5)
 	hp_changed.emit()
+
+
+func _afterimage(at: Vector2, color: Color) -> Node2D:
+	var image := FX.Afterimage.new()
+	image.position = at
+	image.color = color
+	if _visual.has_sprite():
+		var sprite: AnimatedSprite2D = _visual._sprite
+		image.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, sprite.frame)
+		image.sprite_offset = sprite.offset
+		image.sprite_scale = sprite.scale * Vector2(-1.0 if sprite.flip_h else 1.0, 1.0)
+	return image
+
+
+func _sigil(at: Vector2, radius: float, duration: float) -> void:
+	var seal := FX.Sigil.new()
+	seal.theme = hero_id
+	seal.position = at
+	seal.radius = radius
+	seal.life = duration
+	seal.intensity = 0.7 if duration > 1.0 else 1.0
+	world.add_ground_fx(seal)

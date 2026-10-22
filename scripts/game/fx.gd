@@ -207,6 +207,9 @@ class StarStreak extends Node2D:
 class Afterimage extends Node2D:
 	var color := Color(0.6, 0.1, 0.15)
 	var life := 0.25
+	var texture: Texture2D
+	var sprite_offset := Vector2.ZERO
+	var sprite_scale := Vector2.ONE
 	var _t := 0.0
 
 	func _process(delta: float) -> void:
@@ -218,9 +221,96 @@ class Afterimage extends Node2D:
 
 	func _draw() -> void:
 		var a := 0.45 * (1.0 - _t / life)
+		if texture:
+			draw_set_transform(Vector2.ZERO, 0.0, sprite_scale)
+			draw_texture(texture, sprite_offset - texture.get_size() * 0.5, Color(color.r, color.g, color.b, a))
+			return
 		draw_colored_polygon(PackedVector2Array([
 			Vector2(-16, 0), Vector2(16, 0), Vector2(12, -48), Vector2(0, -66), Vector2(-12, -48)]),
 			Color(color.r, color.g, color.b, a))
+
+
+## Lightweight animated heraldry. Geometry stays crisp at every area upgrade.
+## Visual only: damage, cooldowns and enemy telegraphs are owned by gameplay.
+class Sigil extends Node2D:
+	var theme := "mage"
+	var radius := 100.0
+	var life := 0.65
+	var intensity := 1.0
+	var _t := 0.0
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= life:
+			queue_free()
+		else:
+			queue_redraw()
+
+	func _draw() -> void:
+		var k := clampf(_t / life, 0.0, 1.0)
+		var fade := minf(k * 9.0, 1.0) * (1.0 - k) * intensity
+		var r := radius * (0.78 + 0.22 * sin(k * PI * 0.5))
+		var col := Color(0.6, 0.72, 1.0)
+		match theme:
+			"knight": col = Color(1.0, 0.76, 0.3)
+			"ranger": col = Color(0.55, 0.9, 0.45)
+			"rogue": col = Color(0.95, 0.16, 0.3)
+		col.a = fade
+		draw_arc(Vector2.ZERO, r, 0, TAU, 64, Color(col.r, col.g, col.b, fade * 0.2), 13.0, true)
+		draw_arc(Vector2.ZERO, r, 0, TAU, 64, col, 2.0, true)
+		draw_arc(Vector2.ZERO, r * 0.83, -_t, TAU - _t, 64, col, 1.0, true)
+		# Broken orbit and small angular runes instead of a solid opaque disk.
+		for i in 12:
+			var angle := TAU * i / 12.0 + _t * (0.45 if theme != "rogue" else -1.5)
+			var dir := Vector2.from_angle(angle)
+			var tangent := dir.orthogonal()
+			var at := dir * r * 0.92
+			draw_polyline(PackedVector2Array([at - tangent * 3.0, at + dir * 5.0,
+				at + tangent * 3.0, at - dir * 3.0]), col, 1.5, true)
+			draw_arc(Vector2.ZERO, r * 0.7, angle, angle + 0.25, 6, col, 2.0, true)
+		match theme:
+			"mage":
+				# Six-point celestial seal and orbiting stars.
+				for turn in 2:
+					var points := PackedVector2Array()
+					for i in 4:
+						points.append(Vector2.from_angle(i * TAU / 3 + turn * PI + _t * 0.2) * r * 0.63)
+					draw_polyline(points, col, 2.0, true)
+				for i in 6:
+					var at := Vector2.from_angle(i * TAU / 6 - _t) * r * 0.76
+					draw_line(at - Vector2(4, 0), at + Vector2(4, 0), col, 1.5, true)
+					draw_line(at - Vector2(0, 6), at + Vector2(0, 6), col, 1.5, true)
+			"knight":
+				# Crown, radiating mane and the central blade of judgment.
+				for i in 16:
+					var dir := Vector2.from_angle(i * TAU / 16)
+					draw_line(dir * r * 0.38, dir * r * (0.62 if i % 2 == 0 else 0.5), col, 2.5, true)
+				var crown := PackedVector2Array([Vector2(-.24, -.22), Vector2(-.3, -.48),
+					Vector2(-.1, -.37), Vector2(0, -.59), Vector2(.1, -.37),
+					Vector2(.3, -.48), Vector2(.24, -.22)])
+				for j in crown.size():
+					crown[j] *= r
+				draw_polyline(crown, col, 2.5, true)
+				draw_line(Vector2(0, -r * .22), Vector2(0, r * .5), col, 5.0, true)
+				draw_line(Vector2(-r * .16, 0), Vector2(r * .16, 0), col, 3.0, true)
+			"ranger":
+				for i in 8:
+					var dir := Vector2.from_angle(i * TAU / 8 + _t * .25)
+					var at := dir * r * .5
+					draw_line(dir * r * .22, dir * r * .67, col, 1.5, true)
+					draw_colored_polygon(PackedVector2Array([at, at + dir.orthogonal() * r * .07,
+						at + dir * r * .19, at - dir.orthogonal() * r * .07]), Color(col.r, col.g, col.b, fade * .5))
+			"rogue":
+				for i in 8:
+					var dir := Vector2.from_angle(i * TAU / 8 - _t * 1.4)
+					var side := dir.orthogonal() * r * .05
+					draw_colored_polygon(PackedVector2Array([dir * r * .22 - side,
+						dir * r * .22 + side, dir * r * .7]), col)
+		# Outward sparks, deterministic so rendering does not alter gameplay RNG.
+		for i in 18:
+			var dir := Vector2.from_angle(i * 2.39996)
+			var at := dir * r * (0.6 + k * (0.45 + (i % 3) * .1))
+			draw_line(at, at + dir * (3.0 + 9.0 * k), Color(col.r, col.g, col.b, fade * .7), 1.5, true)
 
 
 ## Giant golden sword plunging from the sky (knight ultimate).

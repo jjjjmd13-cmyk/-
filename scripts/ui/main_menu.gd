@@ -4,7 +4,6 @@ extends Control
 signal start_pressed
 
 const UI := preload("res://scripts/ui/ui.gd")
-const HEROES := preload("res://scripts/data/heroes.gd")
 const SettingsMenu := preload("res://scripts/ui/settings_menu.gd")
 const MenuBackground := preload("res://scripts/ui/menu_background.gd")
 
@@ -29,26 +28,7 @@ func _build() -> void:
 	add_child(bg)
 	move_child(bg, 0)
 
-	# Hero line-up on the right.
-	var lineup := Control.new()
-	lineup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	lineup.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(lineup)
-	move_child(lineup, 1)
-	var xs := [0.48, 0.6, 0.72, 0.84]
-	for i in HEROES.ORDER.size():
-		var tr := TextureRect.new()
-		tr.texture = load(HEROES.DATA[HEROES.ORDER[i]].portrait)
-		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		tr.anchor_left = xs[i] - 0.1
-		tr.anchor_right = xs[i] + 0.1
-		tr.anchor_top = 0.16 if i % 2 == 0 else 0.1
-		tr.anchor_bottom = 0.98 if i % 2 == 0 else 0.92
-		tr.modulate = Color(0.75, 0.68, 0.68, 0.0)
-		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		lineup.add_child(tr)
-		create_tween().tween_property(tr, "modulate:a", 0.92, 1.2).set_delay(0.15 * i)
+	# The key art already includes all four heroes; avoid duplicate cutouts.
 
 	var left := VBoxContainer.new()
 	left.anchor_left = 0.06
@@ -58,7 +38,7 @@ func _build() -> void:
 	left.alignment = BoxContainer.ALIGNMENT_CENTER
 	left.add_theme_constant_override("separation", 16)
 	add_child(left)
-	move_child(left, 2)
+	move_child(left, 1)
 
 	var title := UI.title(Game.t("game_title"), 104)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT

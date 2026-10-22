@@ -24,7 +24,9 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	# Controls under a CanvasLayer do not inherit the window theme.
 	theme = Game.theme
-	add_child(MenuBackground.new())
+	var backdrop := MenuBackground.new()
+	backdrop.dim = 0.6
+	add_child(backdrop)
 
 	var root := VBoxContainer.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

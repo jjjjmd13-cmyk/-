@@ -1,5 +1,8 @@
 extends Control
-## Animated backdrop for menus: dark gradient with drifting embers.
+## Shared key-art backdrop. UI stays native and localized over the illustration.
+
+const KEY_ART := preload("res://assets/menu/title-screen.png")
+var dim := 0.0
 
 var _embers: Array = []
 var _t := 0.0
@@ -35,15 +38,18 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var s := size
-	# Vertical gradient built from bands.
-	var bands := 24
-	for i in bands:
-		var k := float(i) / bands
-		var col := Color(0.05, 0.035, 0.045).lerp(Color(0.2, 0.04, 0.06), pow(k, 2.2))
-		draw_rect(Rect2(0, s.y * k, s.x, s.y / bands + 1), col)
-	# Red glow behind the heroes.
-	for r in [900.0, 650.0, 420.0]:
-		draw_circle(Vector2(s.x * 0.68, s.y * 0.72), r, Color(0.5, 0.05, 0.08, 0.06))
+	# Cover the viewport without distortion; centre-crop at wider/narrower aspects.
+	var image_size := KEY_ART.get_size()
+	var cover := maxf(s.x / image_size.x, s.y / image_size.y)
+	var drawn_size := image_size * cover
+	draw_texture_rect(KEY_ART, Rect2((s - drawn_size) * 0.5, drawn_size), false)
+	# Quiet the button side while keeping the heroes' armour and faces visible.
+	for i in 48:
+		var k := float(i) / 47.0
+		var alpha := 0.34 * pow(1.0 - k, 2.0)
+		draw_rect(Rect2(s.x * k, 0, s.x / 47.0 + 1, s.y), Color(0.015, 0.012, 0.02, alpha))
+	if dim > 0.0:
+		draw_rect(Rect2(Vector2.ZERO, s), Color(0.015, 0.012, 0.02, dim))
 	for e in _embers:
 		var p := Vector2(e.x * s.x, e.y * s.y)
 		var flick := 0.6 + 0.4 * sin(_t * 6.0 + e.w * 3.0)

@@ -50,6 +50,9 @@ func _run() -> void:
 	_main.show_select()
 	await _frames(40)
 	await _shot("02_hero_select")
+	if OS.get_cmdline_user_args().has("--menu-only"):
+		Game.quit_game()
+		return
 
 	var i := 3
 	for hero in ["rogue", "mage", "ranger", "knight"]:

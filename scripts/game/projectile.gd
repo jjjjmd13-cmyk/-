@@ -14,6 +14,7 @@ var knockback := 80.0
 
 var _hit := {}
 var _t := 0.0
+var _trail: Array[Vector2] = []
 
 
 func _process(delta: float) -> void:
@@ -26,6 +27,9 @@ func _process(delta: float) -> void:
 		if target:
 			var want: Vector2 = (target.global_position + Vector2(0, -30) - global_position).normalized() * velocity.length()
 			velocity = velocity.lerp(want, clampf(homing * delta, 0.0, 1.0))
+	_trail.append(global_position)
+	if _trail.size() > 9:
+		_trail.pop_front()
 	position += velocity * delta
 	rotation = velocity.angle()
 	if not world.arena_rect.has_point(global_position):
@@ -62,6 +66,17 @@ func _expire() -> void:
 
 
 func _draw() -> void:
+	var trail_color := Color(0.58, 0.9, 0.42)
+	match kind:
+		"dagger": trail_color = Color(0.9, 0.12, 0.26)
+		"orb": trail_color = Color(0.5, 0.65, 1.0)
+		"wave": trail_color = Color(1.0, 0.8, 0.35)
+	for i in range(1, _trail.size()):
+		var alpha := float(i) / _trail.size()
+		var a := to_local(_trail[i - 1])
+		var b := to_local(_trail[i])
+		draw_line(a, b, Color(trail_color.r, trail_color.g, trail_color.b, alpha * 0.12), 12.0 * alpha, true)
+		draw_line(a, b, Color(trail_color.r, trail_color.g, trail_color.b, alpha * 0.75), 2.5 * alpha, true)
 	match kind:
 		"arrow":
 			draw_line(Vector2(-34, 0), Vector2(0, 0), Color(0.5, 0.36, 0.22), 3.0, true)
