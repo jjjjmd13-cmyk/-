@@ -189,6 +189,9 @@ class Telegraph extends Node2D:
 		draw_circle(Vector2.ZERO, radius, Color(0.65, 0.045, 0.075, 0.055 + 0.035 * urgency))
 		draw_arc(Vector2.ZERO, radius, 0, TAU, 96, Color(edge, 0.09 + 0.07 * urgency), 4.0, true)
 		draw_arc(Vector2.ZERO, radius, 0, TAU, 96, Color(edge, 0.62 + 0.28 * urgency), 1.5, true)
+		# Thin timing ring that grows to the edge: impact when it meets the boundary.
+		if k > 0.02:
+			draw_arc(Vector2.ZERO, radius * k, 0, TAU, 72, Color(edge, 0.22 + 0.3 * urgency), 1.5, true)
 
 
 ## Line telegraph for charges.
@@ -217,6 +220,9 @@ class LineTelegraph extends Node2D:
 		draw_rect(rect, Color(0.65, 0.045, 0.075, 0.055 + 0.035 * urgency))
 		draw_rect(rect, Color(edge, 0.09 + 0.07 * urgency), false, 4.0, true)
 		draw_rect(rect, Color(edge, 0.62 + 0.28 * urgency), false, 1.5, true)
+		# Timing sweep: the charge starts when it reaches the far end.
+		var x := length * k
+		draw_line(Vector2(x, -width / 2), Vector2(x, width / 2), Color(edge, 0.25 + 0.3 * urgency), 2.0, true)
 
 
 ## Falling star streak for the mage skill.
