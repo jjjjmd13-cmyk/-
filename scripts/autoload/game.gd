@@ -126,10 +126,15 @@ func _notification(what: int) -> void:
 		quit_game()
 
 
+## Emitted when a setting changes outside the settings menu (e.g. F11).
+signal settings_changed
+
+
 func toggle_fullscreen() -> void:
 	settings.fullscreen = not settings.fullscreen
 	apply_settings()
 	save()
+	settings_changed.emit()
 
 
 func _unhandled_input(event: InputEvent) -> void:

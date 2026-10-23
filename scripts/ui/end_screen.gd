@@ -8,6 +8,8 @@ const UI := preload("res://scripts/ui/ui.gd")
 var won := false
 ## Offer to keep playing in endless mode (after a first victory).
 var can_continue := false
+## The run ended during endless mode (past the final wave).
+var endless := false
 var new_best := false
 var wave := 1
 var kills := 0
@@ -31,11 +33,17 @@ func _ready() -> void:
 	col.modulate.a = 0.0
 	create_tween().tween_property(col, "modulate:a", 1.0, 0.6).set_delay(0.3)
 
-	var t := UI.title(Game.t("victory_title" if won else "defeat_title"), 96)
-	if not won:
+	var title_key := "victory_title" if won else ("endless_over_title" if endless else "defeat_title")
+	var t := UI.title(Game.t(title_key), 96)
+	if endless and not won:
+		t.add_theme_color_override("font_color", Game.COLOR_GOLD)
+	elif not won:
 		t.add_theme_color_override("font_color", Color(0.85, 0.2, 0.22))
 	col.add_child(t)
-	var sub := UI.label(Game.t("victory_sub" if won else "defeat_sub"), 30, Game.COLOR_DIM)
+	var sub_text := Game.t("victory_sub" if won else "defeat_sub")
+	if endless and not won:
+		sub_text = Game.t("endless_over_sub") % wave
+	var sub := UI.label(sub_text, 30, Game.COLOR_DIM)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(sub)
 	var stats := UI.label(Game.t("end_stats") % [wave, kills, level, UI.format_time(time)], 30)
@@ -58,8 +66,8 @@ func _ready() -> void:
 	for b in _buttons:
 		b.disabled = true
 		col.add_child(b)
-	# Short delay so frantic button mashing at death does not skip the screen.
-	get_tree().create_timer(0.9, true, false, true).timeout.connect(func() -> void:
+	# Delay so mashing attack/dash keys at death does not skip the results.
+	get_tree().create_timer(1.6, true, false, true).timeout.connect(func() -> void:
 		for b in _buttons:
 			b.disabled = false
 		_buttons[0].grab_focus())

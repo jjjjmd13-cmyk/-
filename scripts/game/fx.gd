@@ -186,12 +186,14 @@ class Telegraph extends Node2D:
 		# Quiet crimson boundary; urgency rises only in the final fifth.
 		var urgency := smoothstep(0.78, 1.0, k)
 		var edge := Color(0.85, 0.16, 0.19).lerp(Color(1.0, 0.42, 0.35), urgency)
-		draw_circle(Vector2.ZERO, radius, Color(0.65, 0.045, 0.075, 0.055 + 0.035 * urgency))
-		draw_arc(Vector2.ZERO, radius, 0, TAU, 96, Color(edge, 0.09 + 0.07 * urgency), 4.0, true)
-		draw_arc(Vector2.ZERO, radius, 0, TAU, 96, Color(edge, 0.62 + 0.28 * urgency), 1.5, true)
-		# Thin timing ring that grows to the edge: impact when it meets the boundary.
+		# Readable on the dark floor: a visible fill and a firm edge, brighter near impact.
+		draw_circle(Vector2.ZERO, radius, Color(0.7, 0.05, 0.08, 0.12 + 0.08 * urgency))
+		draw_arc(Vector2.ZERO, radius, 0, TAU, 96, Color(edge, 0.18 + 0.12 * urgency), 6.0, true)
+		draw_arc(Vector2.ZERO, radius, 0, TAU, 96, Color(edge, 0.75 + 0.25 * urgency), 2.5, true)
+		# Timing ring that grows to the edge: impact when it meets the boundary.
 		if k > 0.02:
-			draw_arc(Vector2.ZERO, radius * k, 0, TAU, 72, Color(edge, 0.22 + 0.3 * urgency), 1.5, true)
+			draw_circle(Vector2.ZERO, radius * k, Color(0.8, 0.08, 0.1, 0.07))
+			draw_arc(Vector2.ZERO, radius * k, 0, TAU, 72, Color(edge, 0.35 + 0.35 * urgency), 2.0, true)
 
 
 ## Line telegraph for charges.
@@ -217,9 +219,10 @@ class LineTelegraph extends Node2D:
 		var rect := Rect2(0, -width / 2, length, width)
 		var urgency := smoothstep(0.78, 1.0, k)
 		var edge := Color(0.85, 0.16, 0.19).lerp(Color(1.0, 0.42, 0.35), urgency)
-		draw_rect(rect, Color(0.65, 0.045, 0.075, 0.055 + 0.035 * urgency))
-		draw_rect(rect, Color(edge, 0.09 + 0.07 * urgency), false, 4.0, true)
-		draw_rect(rect, Color(edge, 0.62 + 0.28 * urgency), false, 1.5, true)
+		draw_rect(rect, Color(0.7, 0.05, 0.08, 0.12 + 0.08 * urgency))
+		draw_rect(Rect2(0, -width / 2, length * k, width), Color(0.8, 0.08, 0.1, 0.07))
+		draw_rect(rect, Color(edge, 0.18 + 0.12 * urgency), false, 6.0, true)
+		draw_rect(rect, Color(edge, 0.75 + 0.25 * urgency), false, 2.5, true)
 		# Timing sweep: the charge starts when it reaches the far end.
 		var x := length * k
 		draw_line(Vector2(x, -width / 2), Vector2(x, width / 2), Color(edge, 0.25 + 0.3 * urgency), 2.0, true)

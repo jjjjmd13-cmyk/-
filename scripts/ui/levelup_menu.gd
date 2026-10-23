@@ -19,7 +19,8 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	# Controls under a CanvasLayer do not inherit the window theme.
 	theme = Game.theme
-	add_child(UI.dim_background(0.65))
+	# Dark enough that damage numbers and the wave banner below don't fight the title.
+	add_child(UI.dim_background(0.82))
 	var center := UI.full_center()
 	add_child(center)
 	var col := UI.centered_column(26)
@@ -52,10 +53,16 @@ func _ready() -> void:
 
 
 func _unlock() -> void:
-	for b in _buttons:
+	var start := 0
+	for i in _buttons.size():
+		var b := _buttons[i]
 		b.disabled = false
+		# Only the focused card is highlighted; the mouse moves the focus with it.
+		b.add_theme_stylebox_override("hover", b.get_theme_stylebox("normal"))
+		if b.get_global_rect().has_point(b.get_global_mouse_position()):
+			start = i
 	if _buttons.size() > 0:
-		_buttons[0].grab_focus()
+		_buttons[start].grab_focus()
 
 
 func _card(id: String, new_level: int, hotkey: int) -> Button:
@@ -82,7 +89,7 @@ func _card(id: String, new_level: int, hotkey: int) -> Button:
 	var name_l := UI.label(Game.t("up_" + id), 36, Game.COLOR_GOLD, true)
 	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(name_l)
-	if id != "elixir":
+	if not id in ["elixir", "temper", "fortitude"]:
 		var lv := UI.label(Game.t("up_stack") % new_level, 22, Color(0.75, 0.6, 0.9))
 		lv.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		v.add_child(lv)

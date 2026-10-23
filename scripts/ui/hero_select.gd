@@ -18,6 +18,9 @@ var _skill_l: Label
 var _record_l: Label
 var _stat_bars: Array = []
 var _started := false
+## Card picked by a mouse click; a second click on it (or the start button) begins.
+var _clicked := ""
+var _mouse_press := false
 
 
 func _ready() -> void:
@@ -165,8 +168,23 @@ func _make_card(id: String) -> Button:
 	b.focus_entered.connect(func() -> void:
 		Audio.play("ui_move", -8.0, 0.0)
 		_focus_hero(id))
+	# Hovering only previews a hero; it takes a click to pick and a second click to start.
 	b.mouse_entered.connect(func() -> void: b.grab_focus())
+	b.mouse_exited.connect(func() -> void:
+		# Leaving the cards shows the picked hero again.
+		if _clicked != "" and _clicked != id:
+			_cards[_clicked].grab_focus())
+	b.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed:
+			_mouse_press = true)
 	b.pressed.connect(func() -> void:
+		var by_mouse := _mouse_press
+		_mouse_press = false
+		if by_mouse and _clicked != id:
+			_clicked = id
+			b.grab_focus()
+			_tint_cards()
+			return
 		if _current == id:
 			_confirm()
 		else:
@@ -188,14 +206,18 @@ func _focus_hero(id: String) -> void:
 		Game.t("label_skill"), Game.t(d.skill), Game.t("label_skill2"), Game.t(d.skill2),
 		Game.t("label_ult"), Game.t(d.ult)]
 	var rec := Game.get_record(id)
-	_record_l.text = Game.t("record_best") % [int(rec.best_wave), int(rec.wins), int(rec.hard_wins)]
+	_record_l.text = Game.t("record_best") % [int(rec.best_wave), int(rec.wins), int(rec.hard_wins), int(rec.get("best_kills", 0)), int(rec.get("runs", 0))]
 	for i in _stat_bars.size():
 		_stat_bars[i].value = d.ratings[i]
 		_stat_bars[i].color = d.accent
 		_stat_bars[i].queue_redraw()
+	_tint_cards()
+
+
+func _tint_cards() -> void:
 	for k in _cards:
 		var tr: TextureRect = _cards[k].get_child(0)
-		tr.modulate = Color.WHITE if k == id else Color(0.55, 0.5, 0.5)
+		tr.modulate = Color.WHITE if k == _current or k == _clicked else Color(0.55, 0.5, 0.5)
 
 
 func _confirm() -> void:
@@ -203,9 +225,10 @@ func _confirm() -> void:
 		return
 	_started = true
 	Audio.play("ui_click", 0.0, 0.0)
-	Game.selected_hero = _current
+	var id := _clicked if _clicked != "" else _current
+	Game.selected_hero = id
 	Game.save()
-	hero_chosen.emit(_current)
+	hero_chosen.emit(id)
 
 
 func _unhandled_input(event: InputEvent) -> void:

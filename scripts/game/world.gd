@@ -20,7 +20,7 @@ const TOTAL_WAVES := 15
 ## A boss appears every BOSS_EVERY waves (5, 10, 15, then 20, 25... in endless mode).
 const BOSS_EVERY := 5
 const ARENA := Rect2(-1700, -1300, 3400, 2600)
-const MAX_ENEMIES := 170
+const MAX_ENEMIES := 150
 const MAX_PICKUPS := 260
 
 var arena_rect := ARENA.grow(200)
@@ -34,6 +34,8 @@ var state := "intermission"
 var run_time := 0.0
 var kills := 0
 var vacuum := false
+## True between killing the final boss and the victory screen.
+var _winning := false
 ## True after the player chose to keep going past the final wave.
 var endless := false
 var pending_levels := 0
@@ -244,7 +246,8 @@ func _start_wave(n: int) -> void:
 	wave = n
 	wave_time = 0.0
 	state = "fighting"
-	wave_duration = 30.0 + wave * 1.5
+	# Longer waves give new players time to find their feet before the first boss.
+	wave_duration = 38.0 + wave * 1.5
 	_spawn_t = 0.5
 	if is_boss_wave(wave):
 		_hud.show_banner(Game.t("wave_banner") % wave, Game.t("boss_banner_" + boss_kind_for_wave(wave)))
@@ -271,14 +274,16 @@ func _hp_mult() -> float:
 
 
 func _dmg_mult() -> float:
-	return (1.0 + 0.07 * float(wave - 1)) * float(Game.DIFFICULTY[Game.difficulty].damage)
+	# The first two waves hit softer while the player learns to dodge.
+	var early := 0.7 if wave == 1 else (0.85 if wave == 2 else 1.0)
+	return early * (1.0 + 0.07 * float(wave - 1)) * float(Game.DIFFICULTY[Game.difficulty].damage)
 
 
 func _spawn_group() -> void:
 	var boss_alive: bool = is_instance_valid(boss) and not boss.dead
 	var spawn_rate := float(Game.DIFFICULTY[Game.difficulty].spawn)
 	var interval := maxf(0.25, 1.05 - 0.055 * wave) / spawn_rate
-	var cap := mini(int((50 + wave * 9) * spawn_rate), MAX_ENEMIES)
+	var cap := mini(int((50 + wave * 8) * spawn_rate), MAX_ENEMIES)
 	if boss_alive:
 		# Fewer adds during boss fights so the duel stays the focus.
 		interval *= 3.0
@@ -349,6 +354,11 @@ func clamp_to_arena(p: Vector2) -> Vector2:
 func boss_kind_for_wave(w: int) -> String:
 	## Dread Knight, Blood Witch, Void Sovereign, then repeating in endless mode.
 	return Boss.ORDER[(maxi(w / BOSS_EVERY, 1) - 1) % Boss.ORDER.size()]
+
+
+func has_room_for_enemy() -> bool:
+	## Summons respect the same cap as wave spawns.
+	return enemies.size() < MAX_ENEMIES
 
 
 func spawn_enemy_at(kind: String, pos: Vector2, elite: bool = false) -> Node2D:
@@ -422,8 +432,10 @@ func _on_enemy_died(e: Node) -> void:
 	if e.is_boss:
 		_on_boss_killed(e)
 		return
+	if _winning:
+		return
 	drop_xp(e.global_position, e.xp)
-	var potion_chance := 0.012
+	var potion_chance := 0.03 if wave <= 4 else 0.012
 	if e.kind == "brute":
 		potion_chance = 0.12
 	if e.elite:
@@ -551,6 +563,16 @@ func show_damage(pos: Vector2, amount: float, col: Color, big: bool) -> void:
 	_top.add_child(d)
 
 
+func spawn_text(pos: Vector2, text: String, col: Color) -> void:
+	var d := FX.DamageNumber.new()
+	d.position = pos
+	d.text = text
+	d.color = col
+	d.font_size = 26
+	d.life = 1.0
+	_top.add_child(d)
+
+
 func player_hidden() -> bool:
 	return is_instance_valid(player) and player.is_hidden()
 
@@ -581,7 +603,7 @@ func enemies_in_radius(pos: Vector2, r: float) -> Array:
 
 # ------------------------------------------------------------------ menus / flow
 func _open_levelup() -> void:
-	if _modal != null or _ended or pending_levels <= 0 or player.dead:
+	if _modal != null or _ended or _winning or pending_levels <= 0 or player.dead:
 		return
 	Audio.play("levelup")
 	var m := LevelUpMenu.new()
@@ -593,9 +615,13 @@ func _open_levelup() -> void:
 func _on_upgrade_chosen(id: String) -> void:
 	player.apply_upgrade(id)
 	pending_levels -= 1
+	if pending_levels > 0 and not _ended:
+		# Swap straight to the next card set without unpausing in between.
+		_modal.queue_free()
+		_modal = null
+		_open_levelup()
+		return
 	_close_modal()
-	if pending_levels > 0:
-		_open_levelup.call_deferred()
 
 
 func _show_modal(m: Control) -> void:
@@ -630,12 +656,16 @@ func open_pause() -> void:
 		return
 	var m := PauseMenu.new()
 	m.resumed.connect(_close_modal)
-	m.quit_requested.connect(func(target: String) -> void: exit_requested.emit(target))
+	m.quit_requested.connect(func(target: String) -> void:
+		# A run abandoned from the pause menu still counts toward the records.
+		if not _ended and run_time > 5.0:
+			Game.submit_run(Game.selected_hero, wave, kills, false, not endless)
+		exit_requested.emit(target))
 	_show_modal(m)
 
 
 func _on_player_died() -> void:
-	if _ended:
+	if _ended or _winning:
 		return
 	Audio.play("defeat")
 	Audio.stop_music(1.5)
@@ -644,7 +674,13 @@ func _on_player_died() -> void:
 
 
 func _win() -> void:
+	_winning = true
 	vacuum = true
+	player.invincible = true
+	# Clear hostile shots so nothing lands during the fanfare.
+	for c in _top.get_children():
+		if c is EnemyProjectile:
+			c.queue_free()
 	for e in enemies.duplicate():
 		if not e.dead:
 			e.die()
@@ -666,6 +702,7 @@ func _finish(won: bool) -> void:
 	var m := EndScreen.new()
 	m.won = won
 	m.can_continue = won and not endless
+	m.endless = endless
 	m.new_best = new_best
 	m.wave = reached
 	m.kills = kills
@@ -685,6 +722,8 @@ func _finish(won: bool) -> void:
 func _continue_endless() -> void:
 	endless = true
 	_ended = false
+	_winning = false
+	player.invincible = false
 	if _modal:
 		_modal.queue_free()
 		_modal = null
@@ -695,6 +734,8 @@ func _continue_endless() -> void:
 	_state_t = 3.0
 	_hud.show_banner(Game.t("endless_banner"), Game.t("endless_sub"), 3.0)
 	Audio.play_music("battle")
+	if pending_levels > 0:
+		_open_levelup.call_deferred()
 
 
 func _set_crosshair(on: bool) -> void:
@@ -816,11 +857,18 @@ class Pillar extends StaticBody2D:
 		var width := 230.0 if relic else 210.0
 		draw_texture_rect(tex, Rect2(-width / 2, -width * 0.86, width, width), false, Color(0.68, 0.72, 0.78))
 
-class Brazier extends Node2D:
+class Brazier extends StaticBody2D:
 	var _t := 0.0
 
 	func _ready() -> void:
 		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		# Solid like the pillars, so heroes and monsters walk around it.
+		collision_layer = 1
+		var cs := CollisionShape2D.new()
+		var c := CircleShape2D.new()
+		c.radius = 30.0
+		cs.shape = c
+		add_child(cs)
 
 	func _process(delta: float) -> void:
 		_t += delta

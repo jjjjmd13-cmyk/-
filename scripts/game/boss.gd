@@ -41,6 +41,10 @@ func redraws_every_frame() -> bool:
 	return true
 
 
+## Even in the last phase every boss warning stays up at least this long.
+const MIN_TELEGRAPH := 0.6
+
+
 func _speed_mult() -> float:
 	return 1.0 + 0.3 * float(phase - 1)
 
@@ -153,7 +157,7 @@ func _pick_attack(to_player: Vector2, dist: float) -> void:
 		"slam":
 			_state = "wind"
 			_state_t = 0.9
-			_circle_attack(global_position, 210.0, 0.9 * tel_time, damage * 1.5, Color(0.9, 0.15, 0.1))
+			_circle_attack(global_position, 210.0, maxf(MIN_TELEGRAPH, 0.9 * tel_time), damage * 1.5, Color(0.9, 0.15, 0.1))
 		"charge":
 			_state = "wind"
 			_state_t = 0.7
@@ -161,11 +165,11 @@ func _pick_attack(to_player: Vector2, dist: float) -> void:
 			var tel = FX.LineTelegraph.new()
 			tel.length = 820.0 * 0.6
 			tel.width = radius * 2.2
-			tel.duration = 0.7 * tel_time
+			tel.duration = maxf(MIN_TELEGRAPH, 0.7 * tel_time)
 			tel.rotation = _charge_dir.angle()
 			tel.position = global_position
 			world.add_ground_fx(tel)
-			get_tree().create_timer(0.7 * tel_time, false).timeout.connect(func() -> void:
+			get_tree().create_timer(maxf(MIN_TELEGRAPH, 0.7 * tel_time), false).timeout.connect(func() -> void:
 				if not dead:
 					_state = "charging"
 					_state_t = 0.6
@@ -194,14 +198,14 @@ func _pick_attack(to_player: Vector2, dist: float) -> void:
 				var at: Vector2 = player.global_position
 				if i > 0:
 					at += Vector2.from_angle(randf() * TAU) * randf_range(90.0, 260.0)
-				_circle_attack(at, 95.0, 1.05 * tel_time, damage * 1.2, Color(0.8, 0.05, 0.2))
+				_circle_attack(at, 95.0, maxf(MIN_TELEGRAPH, 1.05 * tel_time), damage * 1.2, Color(0.8, 0.05, 0.2))
 		"spears":
 			_state = "cast"
 			_state_t = 1.0
 			var base := to_player.angle()
 			var spread := [-0.35, 0.0, 0.35] if phase == 1 else [-0.5, -0.25, 0.0, 0.25, 0.5]
 			for off in spread:
-				_spear(base + off, 0.7 * tel_time)
+				_spear(base + off, maxf(MIN_TELEGRAPH, 0.7 * tel_time))
 		"blink":
 			_state = "blink"
 			_state_t = 0.4
@@ -225,7 +229,7 @@ func _pick_attack(to_player: Vector2, dist: float) -> void:
 				var at: Vector2 = player.global_position
 				if i > 0:
 					at += Vector2.from_angle(randf() * TAU) * randf_range(110.0, 340.0)
-				_circle_attack(at, 100.0, 1.1 * tel_time, damage * 1.3, Color(0.55, 0.25, 1.0))
+				_circle_attack(at, 100.0, maxf(MIN_TELEGRAPH, 1.1 * tel_time), damage * 1.3, Color(0.55, 0.25, 1.0))
 		"gravity":
 			_state = "cast"
 			_state_t = 2.6
@@ -245,6 +249,8 @@ func _summon(minion: String, count: int) -> void:
 	_state_t = 0.9
 	Audio.play("boss_roar", -4.0)
 	for i in count:
+		if not world.has_room_for_enemy():
+			break
 		var p := global_position + Vector2.from_angle(TAU * i / count) * 130.0
 		world.spawn_enemy_at(minion, p)
 

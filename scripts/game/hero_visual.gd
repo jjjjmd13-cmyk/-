@@ -178,7 +178,7 @@ func _draw() -> void:
 	if _p.is_empty():
 		_p = PALETTES[hero_id]
 	if invuln_blink and int(time * 20.0) % 2 == 0:
-		modulate.a = 0.45 * stealth_alpha
+		modulate.a = 0.3 * stealth_alpha
 	else:
 		modulate.a = stealth_alpha
 	var bob := absf(sin(walk_phase)) * -3.0 if moving else sin(time * 2.2) * 1.0

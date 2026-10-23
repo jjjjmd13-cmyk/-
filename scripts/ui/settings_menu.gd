@@ -109,6 +109,10 @@ func _toggle(parent: Control, label_key: String, setting: String) -> CheckButton
 		Audio.play("ui_click", -2.0, 0.0)
 		Game.apply_settings()
 		Game.save())
+	# Keep the box in sync when F11 flips fullscreen while the menu is open.
+	Game.settings_changed.connect(func() -> void:
+		if is_instance_valid(c):
+			c.set_pressed_no_signal(Game.settings[setting]))
 	parent.add_child(c)
 	return c
 

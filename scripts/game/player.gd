@@ -13,7 +13,7 @@ const SLOTS := ["skill", "skill2", "ult"]
 
 const DASH_TIME := 0.18
 const DASH_SPEED_MULT := 3.4
-const HIT_INVULN := 0.6
+const HIT_INVULN := 0.75
 ## Barrier (Astra's passive): regrows after this many seconds without being hit.
 const BARRIER_DELAY := 6.0
 const BARRIER_REGEN := 15.0
@@ -63,6 +63,8 @@ var dash_timer := 0.0
 var aim_dir := Vector2.RIGHT
 
 var _invuln := 0.0
+## Set once the run is won: nothing can hurt the hero during the victory fanfare.
+var invincible := false
 var _dash_t := 0.0
 var _dash_dir := Vector2.ZERO
 var _dash_hits := {}
@@ -74,6 +76,8 @@ var _afterimage_t := 0.0
 var _heal_accum := 0.0
 ## External pull applied this frame (Void Sovereign's gravity). Dashing ignores it.
 var _pull := Vector2.ZERO
+## Shove away from whatever just hit the hero, so the hit reads on screen.
+var _hit_push := Vector2.ZERO
 var _visual: Node2D
 
 # Skill states.
@@ -175,7 +179,8 @@ func _physics_process(delta: float) -> void:
 			_shadowstep_hits()
 	else:
 		var spd := move_speed * (1.6 if _hidden_t > 0.0 else 1.0)
-		velocity = move * spd + _pull
+		velocity = move * spd + _pull + _hit_push
+		_hit_push = _hit_push.move_toward(Vector2.ZERO, 2200.0 * delta)
 		if Input.is_action_just_pressed("dash") and dash_timer <= 0.0:
 			_start_dash(move)
 		if (Input.is_action_pressed("attack") or Game.settings.auto_attack) and attack_timer <= 0.0:
@@ -350,6 +355,11 @@ func is_hidden() -> bool:
 
 
 func _use_skill(slot: String) -> void:
+	if slot == "ult" and hero_id == "rogue" and world.nearest_enemy(global_position, 520.0) == null:
+		# Thousand Cuts needs a target; don't burn the cooldown on empty air.
+		Audio.play("ui_move", -4.0, 0.0)
+		world.spawn_text(global_position + Vector2(0, -120), Game.t("no_target"), Color(1, 0.6, 0.6))
+		return
 	timers[slot] = cooldowns[slot] * cd_mult
 	_attack_anim = 0.0
 	_visual.action_anim = "skill"
@@ -622,7 +632,7 @@ func roll_damage(mult: float) -> Array:
 
 
 func take_damage(amount: float, source: Node) -> bool:
-	if dead or _invuln > 0.0 or _dash_t > 0.0 or _charge_t > 0.0 or _dance_left > 0:
+	if dead or invincible or _invuln > 0.0 or _dash_t > 0.0 or _charge_t > 0.0 or _dance_left > 0:
 		return false
 	var final := amount * (1.0 - clampf(armor, 0.0, 0.7))
 	if _awaken_t > 0.0:
@@ -646,6 +656,11 @@ func take_damage(amount: float, source: Node) -> bool:
 	damage_log[src_kind] = float(damage_log.get(src_kind, 0.0)) + final
 	_invuln = HIT_INVULN
 	_visual.flash = 1.0
+	if is_instance_valid(source) and source is Node2D:
+		var away: Vector2 = global_position - source.global_position
+		if away.length() > 1.0:
+			_hit_push = away.normalized() * 380.0
+	world.spawn_ring(global_position + Vector2(0, -40), 70.0, Color(1, 0.25, 0.2), 0.25)
 	Audio.play("hurt")
 	world.shake(7.0)
 	world.show_damage(global_position + Vector2(0, -90), final, Color(1, 0.35, 0.3), false)
@@ -707,6 +722,10 @@ func apply_upgrade(id: String) -> void:
 		"thorns": thorns += 1
 		"cleave": cleave += 1
 		"elixir": heal(max_hp * 0.5)
+		"temper": damage *= 1.05
+		"fortitude":
+			max_hp += 10.0
+			heal(10.0, false)
 	hp_changed.emit()
 
 

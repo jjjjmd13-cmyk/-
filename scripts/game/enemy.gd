@@ -112,6 +112,10 @@ func _ready() -> void:
 		sprite.material = ART.actor_material(false, elite or is_boss)
 		_visual.sprite = sprite
 		_visual.add_child(sprite)
+	if kind == "archer" or kind == "cultist":
+		var tell := AimTell.new()
+		tell.enemy = self
+		add_child(tell)
 
 
 func _physics_process(delta: float) -> void:
@@ -339,6 +343,8 @@ func _necro_ai(to_player: Vector2, dist: float, delta: float) -> Vector2:
 		if _minions.size() < 6:
 			Audio.play("magic", -6.0, 0.0)
 			for i in 2:
+				if not world.has_room_for_enemy():
+					break
 				var p := global_position + Vector2.from_angle(randf() * TAU) * 60.0
 				var m: Node = world.spawn_enemy_at("skeleton", p)
 				_minions.append(m)
@@ -409,6 +415,37 @@ func draw_body(_v: Node2D) -> void:
 ## True for kinds whose drawing animates every frame.
 func redraws_every_frame() -> bool:
 	return kind in ["bat", "wraith", "bomber", "necro"]
+
+
+## Seconds of warning before an archer or cultist fires.
+const AIM_TELL := 0.5
+
+
+## Ranged monsters glow and sight a line at the hero just before they shoot.
+class AimTell extends Node2D:
+	var enemy: Node
+
+	func _ready() -> void:
+		z_as_relative = false
+		z_index = 34
+
+	func _process(_delta: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		var e = enemy
+		if e.dead or e._shot_cd > AIM_TELL or not is_instance_valid(e.world.player) or e.world.player.dead:
+			return
+		var to: Vector2 = e.world.player.global_position - e.global_position
+		if to.length() > e._stats().range + 80.0:
+			return
+		var k: float = 1.0 - e._shot_cd / AIM_TELL
+		var col := Color(0.4, 0.9, 1.0) if e.kind == "archer" else Color(1, 0.4, 0.85)
+		var muzzle := Vector2(0, -30 if e.kind == "archer" else -40)
+		var dir := (to + Vector2(0, -40) - muzzle).normalized()
+		draw_line(muzzle, muzzle + dir * (80.0 + 160.0 * k), Color(col, 0.18 + 0.32 * k), 2.0 + 2.0 * k, true)
+		draw_circle(muzzle, 8.0 + 10.0 * k, Color(col, 0.25 * k))
+		draw_circle(muzzle, 4.0 + 3.0 * k, Color(1, 1, 1, 0.5 + 0.5 * k))
 
 
 ## Draws the enemy. Static kinds draw once and animate via transform.

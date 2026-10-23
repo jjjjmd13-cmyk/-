@@ -23,8 +23,12 @@ const POOL := [
 	{"id": "cleave", "max": 3, "heroes": ["knight", "rogue"]},
 ]
 
-## Always-available fallback when the pool runs dry.
-const ELIXIR := {"id": "elixir", "max": 999}
+## Always-available fallbacks when the pool runs dry (long endless runs).
+const FALLBACKS := [
+	{"id": "elixir", "max": 999},
+	{"id": "temper", "max": 999},
+	{"id": "fortitude", "max": 999},
+]
 
 
 static func roll(hero_id: String, taken: Dictionary, count: int, rng: RandomNumberGenerator) -> Array:
@@ -42,6 +46,8 @@ static func roll(hero_id: String, taken: Dictionary, count: int, rng: RandomNumb
 		options[i] = options[j]
 		options[j] = tmp
 	var picked := options.slice(0, count)
-	if picked.size() < count:
-		picked.append(ELIXIR)
+	for f in FALLBACKS:
+		if picked.size() >= count:
+			break
+		picked.append(f)
 	return picked
