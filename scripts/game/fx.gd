@@ -183,23 +183,12 @@ class Telegraph extends Node2D:
 			draw_circle(Vector2.ZERO, radius, Color(color, 0.045))
 			draw_arc(Vector2.ZERO, radius, 0, TAU, 72, Color(color, 0.45), 1.5, true)
 			return
-		var amber := Color(1, 0.7, 0.23)
-		draw_circle(Vector2.ZERO, radius, Color(0.035, 0.018, 0.012, 0.34))
-		draw_circle(Vector2.ZERO, radius * k, Color(0.9, 0.16, 0.045, 0.14))
-		for i in range(-int(radius / 24), int(radius / 24) + 1):
-			var x := i * 24.0
-			var h := sqrt(maxf(0, radius * radius - x * x))
-			draw_line(Vector2(x, -h), Vector2(x, h), Color(1, 0.52, 0.2, 0.16), 1, true)
-		draw_arc(Vector2.ZERO, radius, 0, TAU, 96, Color(0.015, 0.01, 0.005, 0.95), 8, true)
-		draw_arc(Vector2.ZERO, radius, 0, TAU, 96, amber, 2.5, true)
-		draw_arc(Vector2.ZERO, radius - 7, -PI / 2, -PI / 2 + TAU * k, 96, Color(1, 0.91, 0.65), 3, true)
-		for i in 12:
-			var d := Vector2.from_angle(i * TAU / 12)
-			var at := d * (radius - 15)
-			draw_colored_polygon(PackedVector2Array([at - d * 10, at + d * 3 + d.orthogonal() * 5, at + d * 3 - d.orthogonal() * 5]), amber)
-		var mark := Vector2(0, -radius + 32)
-		draw_circle(mark, 13, Color(0.04, 0.015, 0.005, 0.9))
-		draw_string(Game.font_bold, mark + Vector2(-4, 6), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color(1, 0.9, 0.65))
+		# Quiet crimson boundary; urgency rises only in the final fifth.
+		var urgency := smoothstep(0.78, 1.0, k)
+		var edge := Color(0.85, 0.16, 0.19).lerp(Color(1.0, 0.42, 0.35), urgency)
+		draw_circle(Vector2.ZERO, radius, Color(0.65, 0.045, 0.075, 0.055 + 0.035 * urgency))
+		draw_arc(Vector2.ZERO, radius, 0, TAU, 96, Color(edge, 0.09 + 0.07 * urgency), 4.0, true)
+		draw_arc(Vector2.ZERO, radius, 0, TAU, 96, Color(edge, 0.62 + 0.28 * urgency), 1.5, true)
 
 
 ## Line telegraph for charges.
@@ -223,14 +212,11 @@ class LineTelegraph extends Node2D:
 	func _draw() -> void:
 		var k := clampf(_t / duration, 0, 1)
 		var rect := Rect2(0, -width / 2, length, width)
-		draw_rect(rect, Color(0.035, 0.018, 0.012, 0.36))
-		draw_rect(Rect2(0, -width / 2, length * k, width), Color(0.9, 0.16, 0.045, 0.16))
-		draw_rect(rect, Color(0.015, 0.01, 0.005, 0.95), false, 8, true)
-		draw_rect(rect, Color(1, 0.7, 0.23), false, 2.5, true)
-		for i in int(length / 70):
-			var x := 35.0 + i * 70
-			draw_polyline(PackedVector2Array([Vector2(x - 12, -width * 0.27), Vector2(x + 8, 0), Vector2(x - 12, width * 0.27)]), Color(1, 0.79, 0.45, 0.65), 2, true)
-		draw_line(Vector2(length * k, -width / 2 + 5), Vector2(length * k, width / 2 - 5), Color(1, 0.92, 0.67), 3, true)
+		var urgency := smoothstep(0.78, 1.0, k)
+		var edge := Color(0.85, 0.16, 0.19).lerp(Color(1.0, 0.42, 0.35), urgency)
+		draw_rect(rect, Color(0.65, 0.045, 0.075, 0.055 + 0.035 * urgency))
+		draw_rect(rect, Color(edge, 0.09 + 0.07 * urgency), false, 4.0, true)
+		draw_rect(rect, Color(edge, 0.62 + 0.28 * urgency), false, 1.5, true)
 
 
 ## Falling star streak for the mage skill.
