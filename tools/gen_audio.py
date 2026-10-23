@@ -1,6 +1,6 @@
 """Synthesizes every sound effect and music loop used by the game.
 
-All audio is generated from scratch (no samples), so there are no licensing
+Combat effects come from tools/gen_combat_sfx.py. All audio is generated from scratch (no samples), so there are no licensing
 concerns. Re-run from the project root to regenerate assets/audio/:
 
     python3 tools/gen_audio.py
@@ -106,49 +106,6 @@ def mix_at(buf, x, start):
 
 # --------------------------------------------------------------- SFX
 def sfx():
-    # Light blade swing: band-passed noise sweep.
-    n = int(SR * 0.18)
-    sweep = np.linspace(5200, 900, n)
-    x = highpass(lowpass(noise(n), sweep), 500) * env(n, 0.02, curve=3)
-    write("swing", x, 0.6)
-
-    # Heavy greatsword swing.
-    n = int(SR * 0.34)
-    sweep = np.linspace(2600, 300, n)
-    x = lowpass(noise(n), sweep) * env(n, 0.05, curve=3)
-    x += 0.3 * sine(np.linspace(180, 60, n), None) * env(n, 0.02, curve=6)
-    write("swing_heavy", x, 0.7)
-
-    # Hit flesh: thump + crunch.
-    n = int(SR * 0.16)
-    t = t_axis(0.16)
-    x = sine(np.linspace(220, 50, n), None) * env(n, 0.001, curve=9)
-    x += 0.6 * lowpass(noise(n), 2500) * env(n, 0.001, curve=14)
-    write("hit", x, 0.75)
-
-    # Critical hit: brighter ring on top.
-    n = int(SR * 0.3)
-    t = t_axis(0.3)
-    x = sine(np.linspace(260, 60, n), None) * env(n, 0.001, curve=9)
-    x += 0.5 * lowpass(noise(n), 4000) * env(n, 0.001, curve=16)
-    x += 0.25 * (sine(1760, t) + sine(2640, t)) * env(n, 0.001, curve=7)
-    write("crit", x, 0.8)
-
-    # Bow release: string pluck + air.
-    n = int(SR * 0.3)
-    x = 0.8 * pluck(110, 0.3, 0.99) * env(n, 0.001, curve=7)
-    x += 0.4 * highpass(lowpass(noise(n), np.linspace(6000, 2000, n)), 1500) * env(n, 0.01, curve=10)
-    write("arrow", x, 0.6)
-
-    # Magic bolt: sparkling up-sweep.
-    n = int(SR * 0.35)
-    t = t_axis(0.35)
-    f = np.linspace(500, 1400, n)
-    x = sine(f, None) * 0.6 + sine(f * 1.5, None) * 0.3
-    x *= env(n, 0.01, curve=5)
-    x += 0.15 * highpass(noise(n), 5000) * env(n, 0.001, curve=8)
-    write("magic", x, 0.55)
-
     # Explosion.
     n = int(SR * 0.9)
     x = lowpass(noise(n), np.linspace(3000, 120, n)) * env(n, 0.002, curve=5)
@@ -182,13 +139,6 @@ def sfx():
     x = highpass(lowpass(noise(n), np.linspace(1200, 6000, n)), 600)
     x *= np.sin(np.linspace(0, np.pi, n)) ** 2
     write("dash", x, 0.5)
-
-    # Enemy death: descending crunch.
-    n = int(SR * 0.3)
-    t = t_axis(0.3)
-    x = lowpass(noise(n), np.linspace(2500, 300, n)) * env(n, 0.001, curve=6)
-    x += 0.5 * square(np.linspace(300, 70, n), t) * env(n, 0.001, curve=10)
-    write("enemy_die", lowpass(x, 3000), 0.55)
 
     # Boss roar.
     n = int(SR * 1.6)
@@ -384,6 +334,9 @@ def soft_clip(x):
 
 if __name__ == "__main__":
     sfx()
+    # Swings, impacts, bow and spells live in their own 44.1 kHz generator.
+    import gen_combat_sfx
+    gen_combat_sfx.main()
     write("music_menu", soft_clip(menu_theme()), 0.7)
     write("music_battle", soft_clip(battle_theme()), 0.7)
     write("music_boss", soft_clip(battle_theme(boss=True)), 0.7)

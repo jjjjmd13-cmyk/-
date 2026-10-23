@@ -40,10 +40,14 @@ static func color_theme(color: Color) -> String:
 		return "rogue"
 	return "knight"
 
-static func stamp(parent: Node2D, hero: String, kind: int, diameter: float) -> Sprite2D:
+static func additive() -> CanvasItemMaterial:
 	if _additive == null:
 		_additive = CanvasItemMaterial.new()
 		_additive.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	return _additive
+
+static func stamp(parent: Node2D, hero: String, kind: int, diameter: float) -> Sprite2D:
+	additive()
 	var sprite := Sprite2D.new()
 	sprite.texture = vfx(hero, kind)
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR

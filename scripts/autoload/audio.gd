@@ -4,7 +4,7 @@ extends Node
 const SFX_NAMES := [
 	"swing", "swing_heavy", "hit", "crit", "arrow", "magic", "explosion", "hurt",
 	"pickup", "levelup", "dash", "enemy_die", "boss_roar", "enemy_shot", "ui_move",
-	"ui_click", "roar", "knives", "wave_horn", "victory", "defeat",
+	"ui_click", "roar", "knives", "wave_horn", "victory", "defeat", "bolt", "bolt_hit",
 ]
 const MUSIC := {
 	"menu": "res://assets/audio/music_menu.wav",
@@ -29,10 +29,17 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	for n in SFX_NAMES:
 		var path := "res://assets/audio/%s.wav" % n
-		if ResourceLoader.exists(path):
-			_streams[n] = load(path)
-		else:
+		if not ResourceLoader.exists(path):
 			push_warning("Missing sound: " + path)
+			continue
+		# Optional variants name_2.wav, name_3.wav ... are picked at random.
+		var list: Array[AudioStream] = [load(path)]
+		for v in range(2, 7):
+			var alt := "res://assets/audio/%s_%d.wav" % [n, v]
+			if not ResourceLoader.exists(alt):
+				break
+			list.append(load(alt))
+		_streams[n] = list
 	for i in POOL_SIZE:
 		var p := AudioStreamPlayer.new()
 		p.bus = "SFX"
@@ -74,7 +81,7 @@ func play(sfx_name: String, volume_db: float = 0.0, pitch_var: float = 0.08) -> 
 	_last_played[sfx_name] = now
 	var p := _pool[_next]
 	_next = (_next + 1) % POOL_SIZE
-	p.stream = _streams[sfx_name]
+	p.stream = _streams[sfx_name].pick_random()
 	p.volume_db = volume_db
 	p.pitch_scale = 1.0 + randf_range(-pitch_var, pitch_var)
 	p.play()

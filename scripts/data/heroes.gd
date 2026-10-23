@@ -46,7 +46,7 @@ const DATA := {
 		"damage": 17.0,
 		"attack_cd": 0.45,
 		"attack_kind": "orb",
-		"proj_speed": 560.0,
+		"proj_speed": 820.0,
 		"pierce": 0,
 		"splash": 70.0,
 		"knockback": 90.0,

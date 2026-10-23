@@ -119,7 +119,7 @@ class Burst extends Node2D:
 	func _draw() -> void:
 		var k := 1.0 - _t / life
 		for p in _parts:
-			draw_circle(p.p, p.s * k, Color(color.r, color.g, color.b, k))
+			draw_circle(p.p, p.s * k, Color(color.r, color.g, color.b, color.a * k))
 
 
 ## Floating damage number.
@@ -339,3 +339,60 @@ class SwordFall extends Node2D:
 		var k := _t / duration
 		_sword.position = Vector2(0, lerpf(-650, -170, k * k))
 		_sword.modulate.a = minf(k * 4, 1)
+
+
+## Mage basic attack: flash at the staff as the arcane bolt leaves.
+class CastFlash extends Node2D:
+	var life := 0.16
+	var _t := 0.0
+
+	func _ready() -> void:
+		material = ART.additive()
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= life:
+			queue_free()
+			return
+		queue_redraw()
+
+	func _draw() -> void:
+		var k := _t / life
+		var a := 1.0 - k
+		draw_circle(Vector2.ZERO, 24.0 * (0.6 + k), Color(0.35, 0.45, 1.0, 0.35 * a))
+		draw_circle(Vector2.ZERO, 11.0 * (1.0 - k * 0.6), Color(0.85, 0.9, 1.0, a))
+		for i in 5:
+			var dir := Vector2.from_angle((i - 2) * 0.32)
+			draw_line(dir * 8.0, dir * (16.0 + 26.0 * k), Color(0.7, 0.8, 1.0, 0.8 * a), 2.0, true)
+
+
+## Mage basic attack impact: white flash, star rays and an arcane ring the size of the splash.
+class ArcaneBurst extends Node2D:
+	var radius := 70.0
+	var life := 0.34
+	var _t := 0.0
+	var _rays: Array = []
+
+	func _ready() -> void:
+		material = ART.additive()
+		for i in 9:
+			_rays.append({"a": i * TAU / 9.0 + randf_range(-0.2, 0.2), "l": randf_range(0.55, 1.0)})
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= life:
+			queue_free()
+			return
+		queue_redraw()
+
+	func _draw() -> void:
+		var k := _t / life
+		var a := 1.0 - k
+		var grow := ease(k, 0.35)
+		draw_circle(Vector2.ZERO, 30.0 * (1.0 - k), Color(1, 1, 1, a * a))
+		draw_circle(Vector2.ZERO, radius * grow, Color(0.3, 0.4, 1.0, 0.12 * a))
+		draw_arc(Vector2.ZERO, radius * grow, 0, TAU, 48, Color(0.65, 0.78, 1.0, 0.9 * a), 3.5 * a + 1.0, true)
+		for r in _rays:
+			var dir := Vector2.from_angle(r.a)
+			var outer: float = radius * r.l * (0.35 + 0.75 * grow)
+			draw_line(dir * outer * 0.45, dir * outer, Color(0.85, 0.9, 1.0, a), 2.5 * a + 0.5, true)

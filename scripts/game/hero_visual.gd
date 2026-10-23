@@ -55,10 +55,19 @@ var dead := false
 var shield_frac := 0.0
 var stealth_alpha := 1.0
 
+## Emitted on each running footfall (the player kicks up dust).
+signal footstep
+
 var _p: Dictionary
 ## Sprite-sheet art, when the hero has some (otherwise the hero is drawn in code).
 var _sprite: AnimatedSprite2D
 var _last_attack_t := -1.0
+## Procedural motion layered on the sprite frames: bob, lean, squash and lunge.
+var _base_scale := Vector2.ONE
+var _lean := 0.0
+var _push := 0.0
+var _squash := Vector2.ONE
+var _step_index := 0
 
 
 func _ready() -> void:
@@ -67,6 +76,7 @@ func _ready() -> void:
 	if _sprite:
 		_sprite.use_parent_material = false
 		_sprite.material = ART.actor_material(true)
+		_base_scale = _sprite.scale
 		add_child(_sprite)
 
 
@@ -101,6 +111,61 @@ func _update_sprite() -> void:
 	else:
 		SpriteSet.play(_sprite, "idle")
 	_last_attack_t = attack_t
+	_animate_body()
+
+
+func _animate_body() -> void:
+	## The strips have few frames, so the body motion between them is done here.
+	var dt := get_process_delta_time()
+	var lean := 0.0
+	var push := 0.0
+	var bob := 0.0
+	var squash := Vector2.ONE
+	var ranged := hero_id == "mage" or hero_id == "ranger"
+	if dead:
+		pass
+	elif dashing:
+		lean = 0.16
+		squash = Vector2(1.06, 0.95)
+	elif attack_t >= 0.0:
+		var k := attack_t
+		if k < 0.22:
+			# Wind-up: pull back slightly.
+			var w := k / 0.22
+			push = -5.0 * w
+			lean = -0.05 * w
+			squash = Vector2(1.0 - 0.03 * w, 1.0 + 0.03 * w)
+		else:
+			# Strike: snap forward (melee) or recoil (ranged), then settle.
+			var w := (k - 0.22) / 0.78
+			var hit := sin(minf(w * 2.2, 1.0) * PI * 0.5) * (1.0 - w)
+			push = (-7.0 if ranged else 16.0) * hit
+			lean = (-0.04 if ranged else 0.1) * hit
+			var punch := maxf(0.0, 1.0 - w * 4.0)
+			squash = Vector2(1.0 + 0.07 * punch, 1.0 - 0.05 * punch)
+	elif moving and _sprite.animation == "run":
+		# Two footfalls per 4-frame run cycle: contact on frames 0 and 2.
+		var u := (_sprite.frame + _sprite.frame_progress) / 2.0
+		var step := int(u)
+		var air := sin(PI * fposmod(u, 1.0))
+		bob = -8.0 * air
+		lean = 0.08
+		squash = Vector2(1.0 - 0.025 * air, 1.0 + 0.035 * air)
+		if air < 0.35:
+			squash = Vector2(1.0 + 0.05 * (1.0 - air / 0.35), 1.0 - 0.045 * (1.0 - air / 0.35))
+		if step != _step_index:
+			_step_index = step
+			footstep.emit()
+	else:
+		var breath := sin(time * 2.4)
+		squash = Vector2(1.0 - 0.006 * breath, 1.0 + 0.014 * breath)
+	var blend := clampf(dt * 18.0, 0.0, 1.0)
+	_lean = lerpf(_lean, lean, blend)
+	_push = lerpf(_push, push, clampf(dt * 30.0, 0.0, 1.0))
+	_squash = _squash.lerp(squash, clampf(dt * 25.0, 0.0, 1.0))
+	_sprite.rotation = _lean * facing
+	_sprite.position = Vector2(_push * facing, bob)
+	_sprite.scale = _base_scale * _squash
 
 
 func _c(col: Color) -> Color:

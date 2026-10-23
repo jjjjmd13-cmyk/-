@@ -123,6 +123,7 @@ func _ready() -> void:
 	# Always draw the hero above enemies so it never gets lost in a crowd.
 	z_index = 1
 	add_child(_visual)
+	_visual.footstep.connect(_on_footstep)
 	var locator := HeroVisual.Locator.new()
 	locator.actor = self
 	add_child(locator)
@@ -264,8 +265,12 @@ func _attack() -> void:
 			if cleave > 0:
 				_fire("wave", origin, aim_dir, 620.0, 0.25 + 0.15 * cleave, 99, 0.42, 26.0 * area_mult)
 		"orb":
-			Audio.play("magic", -3.0)
-			_fire_spread("orb", origin, data.proj_speed, 1.0, data.pierce + extra_pierce, 1.6, 12.0, 1 + extra_projectiles, 0.22)
+			Audio.play("bolt", -4.0, 0.06)
+			var flash := FX.CastFlash.new()
+			flash.position = origin + aim_dir * 26.0
+			flash.rotation = aim_dir.angle()
+			world.add_top_fx(flash)
+			_fire_spread("orb", origin, data.proj_speed, 1.0, data.pierce + extra_pierce, 1.15, 12.0, 1 + extra_projectiles, 0.22)
 		"arrow":
 			Audio.play("arrow", -2.0)
 			_fire_spread("arrow", origin, data.proj_speed, 1.0, data.pierce + extra_pierce, 1.0, 10.0, 1 + extra_projectiles, 0.12)
@@ -313,8 +318,20 @@ func _fire(kind: String, origin: Vector2, dir: Vector2, spd: float, mult: float,
 	p.knockback = data.knockback
 	if kind == "orb":
 		p.splash = data.splash * area_mult
-		p.homing = 3.0
+		p.homing = 4.5
 	return p
+
+
+func _on_footstep() -> void:
+	var dust := FX.Burst.new()
+	dust.position = global_position + Vector2(-_visual.facing * 10.0, -2.0)
+	dust.color = Color(0.55, 0.5, 0.46, 0.5)
+	dust.count = 4
+	dust.speed = 70.0
+	dust.size = 7.0
+	dust.life = 0.35
+	dust.gravity = -60.0
+	world.add_ground_fx(dust)
 
 
 func cooldown_ready(slot: String) -> float:
