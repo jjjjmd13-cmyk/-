@@ -13,6 +13,8 @@ var radius := 10.0
 var splash := 0.0
 var homing := 0.0
 var knockback := 80.0
+## Slow applied to every enemy hit (0 = none).
+var slow := 0.0
 
 var _hit := {}
 var _t := 0.0
@@ -69,6 +71,8 @@ func _process(delta: float) -> void:
 		if center.distance_squared_to(global_position) < (radius + e.radius) * (radius + e.radius):
 			_hit[e] = true
 			world.player_hit_enemy(e, dmg_mult, velocity.normalized() * knockback)
+			if slow > 0.0 and not e.dead:
+				e.apply_slow(slow, 1.2)
 			if splash > 0.0:
 				_explode(e)
 			if pierce <= 0:
@@ -79,12 +83,17 @@ func _process(delta: float) -> void:
 
 
 func _explode(direct: Node) -> void:
-	var burst := FX.ArcaneBurst.new()
-	burst.position = global_position
-	burst.radius = splash
-	world.add_top_fx(burst)
-	world.spawn_burst(global_position, Color(0.6, 0.72, 1.0), 10, 300.0)
-	Audio.play("bolt_hit", -5.0, 0.08)
+	if kind == "orb":
+		var burst := FX.ArcaneBurst.new()
+		burst.position = global_position
+		burst.radius = splash
+		world.add_top_fx(burst)
+		world.spawn_burst(global_position, Color(0.6, 0.72, 1.0), 10, 300.0)
+		Audio.play("bolt_hit", -5.0, 0.08)
+	else:
+		world.spawn_ring(global_position, splash, Color(1.0, 0.7, 0.35), 0.35)
+		world.spawn_burst(global_position, Color(1.0, 0.65, 0.3), 12, 320.0)
+		Audio.play("explosion", -8.0, 0.1)
 	for e in world.enemies_in_radius(global_position, splash):
 		if e != direct and not e.dead:
 			world.player_hit_enemy(e, dmg_mult * 0.6, (e.global_position - global_position).normalized() * knockback)

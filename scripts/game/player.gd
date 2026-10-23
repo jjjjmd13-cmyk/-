@@ -51,6 +51,13 @@ var venom := 0
 var thorns := 0
 var cleave := 0
 var upgrades := {}
+## Small automatic boosts from levels without a card choice.
+var minor_ups := {}
+## Boss reward: survive one lethal hit.
+var undying := 0
+var xp_mult := 1.0
+## Basic attacks made so far (evolutions trigger on every Nth one).
+var _attack_count := 0
 ## Damage taken per source kind, for the end-of-run summary and balancing.
 var damage_log := {}
 
@@ -169,6 +176,8 @@ func _physics_process(delta: float) -> void:
 		_shield_charge(delta)
 	elif _dash_t > 0.0:
 		_dash_t -= delta
+		if _dash_t <= 0.0 and has_mod("evo_tempest"):
+			_tempest_burst()
 		velocity = _dash_dir * move_speed * DASH_SPEED_MULT
 		_afterimage_t -= delta
 		if _afterimage_t <= 0.0:
@@ -253,6 +262,11 @@ func _attack() -> void:
 	_visual.action_anim = "attack"
 	_attack_anim_len = clampf(speed_cd * 0.85, 0.12, 0.4)
 	var origin := global_position + Vector2(0, -40)
+	_attack_count += 1
+	if has_mod("evo_barrage") and data.attack_kind != "melee" and _attack_count % 6 == 0:
+		# Barrage: every sixth shot is a full ring.
+		for i in 12:
+			_fire(data.attack_kind, origin, Vector2.from_angle(TAU * i / 12.0), data.proj_speed, 0.8, data.pierce + extra_pierce, 1.0, 12.0)
 	match data.attack_kind:
 		"melee":
 			_combo += 1
@@ -261,6 +275,11 @@ func _attack() -> void:
 				mult = 2.0
 			var reach: float = data.melee_range * area_mult * (1.3 if _awaken_t > 0.0 else 1.0)
 			var arc: float = data.melee_arc
+			if has_mod("evo_whirlwind") and _attack_count % 4 == 0:
+				# Whirlwind: every fourth swing goes all the way round, harder.
+				arc = 360.0
+				mult *= 1.5
+				reach *= 1.15
 			_visual.attack_arc = deg_to_rad(arc)
 			_melee(origin, reach, arc, mult, data.knockback)
 			if hero_id == "knight":
@@ -286,7 +305,8 @@ func _melee(origin: Vector2, reach: float, arc_deg: float, mult: float, knock: f
 	var slash = FX.Slash.new()
 	slash.theme = hero_id
 	slash.radius = reach * 0.85
-	slash.arc = deg_to_rad(arc_deg)
+	# A full circle can't be drawn as one crescent; 340 degrees reads the same.
+	slash.arc = deg_to_rad(minf(arc_deg, 340.0))
 	slash.width = 34.0 if hero_id == "knight" else 22.0
 	slash.color = data.accent if hero_id != "knight" else Color(1, 0.92, 0.75)
 	slash.rotation = aim_dir.angle()
@@ -354,6 +374,10 @@ func is_hidden() -> bool:
 	return _hidden_t > 0.0
 
 
+func has_mod(id: String) -> bool:
+	return upgrades.has(id)
+
+
 func _use_skill(slot: String) -> void:
 	if slot == "ult" and hero_id == "rogue" and world.nearest_enemy(global_position, 520.0) == null:
 		# Thousand Cuts needs a target; don't burn the cooldown on empty air.
@@ -372,27 +396,46 @@ func _use_skill(slot: String) -> void:
 
 # --- Vesper (rogue)
 func _rogue_skill() -> void:
+	_knife_fan(0.0)
+	if has_mod("rogue_skill_a"):
+		# Second Volley: another fan, offset to fill the gaps.
+		get_tree().create_timer(0.25, false).timeout.connect(func() -> void:
+			if not dead:
+				_knife_fan(0.5))
+
+
+func _knife_fan(offset: float) -> void:
 	Audio.play("knives")
 	var origin := global_position + Vector2(0, -40)
 	var n := 14 + 2 * extra_projectiles
+	var seeking := has_mod("rogue_skill_b")
 	for i in n:
-		var dir := Vector2.from_angle(TAU * i / n + randf() * 0.1)
-		_fire("dagger", origin, dir, 760.0, 1.5, 2, 0.6, 14.0)
+		var dir := Vector2.from_angle(TAU * (i + offset) / n + randf() * 0.1)
+		var k = _fire("dagger", origin, dir, 760.0, 1.5, 4 if seeking else 2, 0.8 if seeking else 0.6, 14.0)
+		if seeking:
+			k.homing = 6.0
 
 
 func _rogue_skill2() -> void:
 	## Smoke Veil: vanish, move faster and land three guaranteed critical hits.
 	Audio.play("dash", 2.0, 0.0)
 	_hidden_t = 3.0
-	_sure_crits = 3
+	_sure_crits = 6 if has_mod("rogue_skill2_b") else 3
 	var smoke := Zones.Smoke.new()
 	smoke.duration = 3.0
 	add_child(smoke)
+	if has_mod("rogue_skill2_a"):
+		# Choking Smoke: the cloud stays behind, hurting and slowing.
+		var field := Zones.SmokeField.new()
+		field.world = world
+		field.radius = 170.0 * area_mult
+		field.position = global_position
+		world.add_ground_fx(field)
 
 
 func _rogue_ult() -> void:
 	## Thousand Cuts: blink between nearby enemies, slashing each one.
-	_dance_left = 12
+	_dance_left = 20 if has_mod("rogue_ult_b") else 12
 	_dance_t = 0.0
 	_dance_hit.clear()
 	_invuln = maxf(_invuln, 0.2)
@@ -437,12 +480,22 @@ func _blade_dance(delta: float) -> void:
 	world.add_top_fx(slash)
 	Audio.play("swing", 0.0, 0.2)
 	world.player_hit_enemy(target, 3.0, aim_dir * 150.0)
+	if has_mod("rogue_ult_b"):
+		heal(max_hp * 0.015, false)
 
 
 # --- Astra (mage)
 func _mage_skill() -> void:
-	_starfall(aim_point(620.0), 160.0 * area_mult, 4.0)
+	var at := aim_point(620.0)
+	_starfall(at, 160.0 * area_mult, 4.0)
 	Audio.play("magic", 2.0, 0.0)
+	if has_mod("mage_skill_a"):
+		# Shattered Star: three smaller stars land around the first.
+		for i in 3:
+			var off := Vector2.from_angle(TAU * i / 3.0 + randf()) * 170.0 * area_mult
+			get_tree().create_timer(0.12 * (i + 1), false).timeout.connect(func() -> void:
+				if not dead:
+					_starfall(at + off, 100.0 * area_mult, 2.2))
 
 
 func _mage_skill2() -> void:
@@ -450,7 +503,10 @@ func _mage_skill2() -> void:
 	Audio.play("magic", 0.0, 0.0)
 	var well := Zones.GravityWell.new()
 	well.world = world
-	well.radius = 190.0 * area_mult
+	well.radius = 190.0 * area_mult * (1.4 if has_mod("mage_skill2_b") else 1.0)
+	if has_mod("mage_skill2_b"):
+		well.duration += 1.5
+	well.collapse = has_mod("mage_skill2_a")
 	well.position = aim_point(560.0)
 	world.add_ground_fx(well)
 	_sigil(well.position, well.radius, well.duration)
@@ -460,8 +516,9 @@ func _mage_ult() -> void:
 	## Meteor Shower: a storm of falling stars around the target area.
 	var center := aim_point(560.0)
 	Audio.play("boss_roar", -8.0, 0.0)
-	for i in 14:
-		get_tree().create_timer(0.2 * i, false).timeout.connect(func() -> void:
+	var storm := has_mod("mage_ult_b")
+	for i in (24 if storm else 14):
+		get_tree().create_timer((0.13 if storm else 0.2) * i, false).timeout.connect(func() -> void:
 			if dead:
 				return
 			var at := center + Vector2.from_angle(randf() * TAU) * 360.0 * sqrt(randf())
@@ -485,17 +542,36 @@ func _starfall(target: Vector2, r: float, mult: float) -> void:
 
 # --- Sylva (ranger)
 func _ranger_skill() -> void:
+	_arrow_fan()
+	if has_mod("ranger_skill_a"):
+		# Double Volley: a second fan right behind the first.
+		get_tree().create_timer(0.2, false).timeout.connect(func() -> void:
+			if not dead:
+				_arrow_fan())
+
+
+func _arrow_fan() -> void:
 	Audio.play("arrow", 2.0, 0.0)
 	var origin := global_position + Vector2(0, -40)
 	var n := 9 + 2 * extra_projectiles
-	_fire_spread("arrow", origin, data.proj_speed * 1.1, 1.2, 2 + extra_pierce, 0.9, 12.0, n, deg_to_rad(70.0) / (n - 1))
+	var heavy := has_mod("ranger_skill_b")
+	var step := deg_to_rad(70.0) / (n - 1)
+	for i in n:
+		var a = _fire("arrow", origin, aim_dir.rotated((i - (n - 1) / 2.0) * step), data.proj_speed * 1.1, 1.2,
+			2 + extra_pierce + (3 if heavy else 0), 0.9, 12.0)
+		if heavy:
+			a.slow = 0.5
 
 
 func _ranger_skill2() -> void:
 	## Vault Shot: leap backwards leaving a snare, firing three heavy arrows.
 	var snare := Zones.Snare.new()
 	snare.world = world
-	snare.radius = 130.0 * area_mult
+	snare.radius = 130.0 * area_mult * (1.3 if has_mod("ranger_skill2_a") else 1.0)
+	if has_mod("ranger_skill2_a"):
+		# Thorn Trap: bigger, lasts longer and cuts whatever stands in it.
+		snare.duration = 4.0
+		snare.thorny = true
 	snare.position = global_position
 	world.add_ground_fx(snare)
 	_sigil(snare.position, snare.radius, snare.duration)
@@ -504,14 +580,20 @@ func _ranger_skill2() -> void:
 	_invuln = maxf(_invuln, _dash_t + 0.1)
 	Audio.play("dash")
 	var origin := global_position + Vector2(0, -40)
-	_fire_spread("arrow", origin, data.proj_speed * 1.2, 2.0, 4 + extra_pierce, 1.0, 14.0, 3, 0.1)
+	for i in 3:
+		var a = _fire("arrow", origin, aim_dir.rotated((i - 1) * 0.1), data.proj_speed * 1.2, 2.0, 4 + extra_pierce, 1.0, 14.0)
+		if has_mod("ranger_skill2_b"):
+			# Blast Arrows: each heavy arrow bursts on impact.
+			a.splash = 110.0 * area_mult
 
 
 func _ranger_ult() -> void:
 	## Arrow Rain: a long volley over the target area that slows everything in it.
 	var rain := Zones.ArrowRain.new()
 	rain.world = world
-	rain.radius = 230.0 * area_mult
+	rain.radius = 230.0 * area_mult * (1.4 if has_mod("ranger_ult_b") else 1.0)
+	if has_mod("ranger_ult_b"):
+		rain.duration += 2.0
 	rain.position = aim_point(600.0)
 	world.add_ground_fx(rain)
 	_sigil(rain.position, rain.radius, rain.duration)
@@ -520,21 +602,30 @@ func _ranger_ult() -> void:
 
 # --- Leon (knight)
 func _knight_skill() -> void:
+	_roar(1.0)
+	if has_mod("knight_skill_a"):
+		# Twin Roar: a second, slightly weaker roar.
+		get_tree().create_timer(0.6, false).timeout.connect(func() -> void:
+			if not dead:
+				_roar(0.7))
+
+
+func _roar(power: float) -> void:
 	Audio.play("roar")
-	var r := 200.0 * area_mult
+	var r := 200.0 * area_mult * (2.0 if has_mod("knight_skill_b") else 1.0)
 	world.shake(10.0)
 	world.spawn_ring(global_position + Vector2(0, -20), r, Color(1, 0.8, 0.4), 0.45)
 	_invuln = maxf(_invuln, 0.5)
 	for e in world.enemies_in_radius(global_position, r):
 		var dir: Vector2 = (e.global_position - global_position).normalized()
 		e.stun = maxf(e.stun, 1.3)
-		world.player_hit_enemy(e, 2.5, dir * 520.0)
+		world.player_hit_enemy(e, 2.5 * power, dir * 520.0)
 
 
 func _knight_skill2() -> void:
 	## Shield Charge: rush forward, bowling enemies aside.
 	_charge_dir = aim_dir
-	_charge_t = 0.32
+	_charge_t = 0.5 if has_mod("knight_skill2_b") else 0.32
 	_charge_hits.clear()
 	_invuln = maxf(_invuln, 0.42)
 	Audio.play("swing_heavy", 2.0, 0.0)
@@ -542,6 +633,15 @@ func _knight_skill2() -> void:
 
 func _shield_charge(delta: float) -> void:
 	_charge_t -= delta
+	if _charge_t <= 0.0 and has_mod("knight_skill2_a"):
+		# Breaker: the charge ends in a shockwave.
+		var at := global_position
+		Audio.play("explosion", -2.0)
+		world.shake(10.0)
+		world.spawn_ring(at, 170.0 * area_mult, Color(1, 0.8, 0.4), 0.45)
+		for e in world.enemies_in_radius(at, 170.0 * area_mult):
+			e.stun = maxf(e.stun, 1.0)
+			world.player_hit_enemy(e, 2.5, (e.global_position - at).normalized() * 420.0)
 	velocity = _charge_dir * 1250.0
 	_afterimage_t -= delta
 	if _afterimage_t <= 0.0:
@@ -556,13 +656,14 @@ func _shield_charge(delta: float) -> void:
 		if side.dot(e.global_position - global_position) < 0.0:
 			side = -side
 		e.stun = maxf(e.stun, 0.8)
-		world.player_hit_enemy(e, 1.8, (side + _charge_dir * 0.5).normalized() * 420.0)
+		world.player_hit_enemy(e, 2.6 if has_mod("knight_skill2_b") else 1.8, (side + _charge_dir * 0.5).normalized() * 420.0)
 
 
 func _knight_ult() -> void:
 	## Lion King's Judgment: a giant blade falls, then Leon is empowered for 6 s.
 	var at := global_position
-	var r := 260.0 * area_mult
+	var majesty := has_mod("knight_ult_b")
+	var r := 260.0 * area_mult * (1.4 if majesty else 1.0)
 	var sword = FX.SwordFall.new()
 	sword.position = at
 	world.add_top_fx(sword)
@@ -578,7 +679,7 @@ func _knight_ult() -> void:
 		for e in world.enemies_in_radius(at, r):
 			e.stun = maxf(e.stun, 1.5)
 			world.player_hit_enemy(e, 5.0, (e.global_position - at).normalized() * 500.0)
-		_awaken_t = 6.0)
+		_awaken_t = 10.0 if majesty else 6.0)
 
 
 func _starfall_impact(at: Vector2, r: float, mult: float) -> void:
@@ -590,6 +691,13 @@ func _starfall_impact(at: Vector2, r: float, mult: float) -> void:
 	world.spawn_burst(at, Color(0.7, 0.8, 1.0), 22, 420.0)
 	for e in world.enemies_in_radius(at, r):
 		world.player_hit_enemy(e, mult, (e.global_position - at).normalized() * 300.0)
+	if has_mod("mage_skill_b") and mult >= 4.0:
+		# Scorched Earth: the main star leaves burning ground.
+		var burn := Zones.Burn.new()
+		burn.world = world
+		burn.radius = r
+		burn.position = at
+		world.add_ground_fx(burn)
 
 
 func _start_dash(move: Vector2) -> void:
@@ -608,6 +716,20 @@ func _shadowstep_hits() -> void:
 			continue
 		_dash_hits[e] = true
 		world.player_hit_enemy(e, 1.0 + 0.6 * shadowstep, _dash_dir * 120.0)
+		if has_mod("evo_nightblade") and not e.dead:
+			# Nightblade: every foe passed through bleeds hard and primes a sure crit.
+			e.apply_bleed(damage * 0.75 * maxi(1, venom))
+			_sure_crits = mini(3, _sure_crits + 1)
+
+
+func _tempest_burst() -> void:
+	## Tempest: the end of every dash bursts outward.
+	var at := global_position
+	world.spawn_ring(at, 130.0 * area_mult, Color(0.7, 0.95, 1.0), 0.3)
+	Audio.play("swing_heavy", -4.0, 0.1)
+	for e in world.enemies_in_radius(at, 130.0 * area_mult):
+		world.player_hit_enemy(e, 2.0, (e.global_position - at).normalized() * 380.0)
+		e.apply_slow(0.5, 1.5)
 
 
 # ------------------------------------------------------------------ damage
@@ -625,6 +747,8 @@ func roll_damage(mult: float) -> Array:
 	var amount := damage * mult * randf_range(0.9, 1.1)
 	if _awaken_t > 0.0:
 		amount *= 1.4
+	if _hidden_t > 0.0 and has_mod("rogue_skill2_b"):
+		amount *= 1.5
 	var crit := _force_crit or randf() < crit_chance
 	if crit:
 		amount *= crit_mult
@@ -665,7 +789,19 @@ func take_damage(amount: float, source: Node) -> bool:
 	world.shake(7.0)
 	world.show_damage(global_position + Vector2(0, -90), final, Color(1, 0.35, 0.3), false)
 	if thorns > 0 and is_instance_valid(source) and source.has_method("hit") and not source.dead:
-		world.damage_enemy(source, amount * 0.5 * thorns, false, Vector2.ZERO)
+		var reflect := amount * 0.5 * thorns * (2.0 if has_mod("evo_blood_armor") else 1.0)
+		world.damage_enemy(source, reflect, false, Vector2.ZERO)
+		if has_mod("evo_blood_armor"):
+			heal(reflect * 0.3, false)
+	if hp <= 0.0 and undying > 0:
+		# Undying: cheat death once.
+		undying -= 1
+		hp = max_hp * 0.5
+		_invuln = 2.0
+		Audio.play("levelup", 0.0, 0.0)
+		world.shake(12.0)
+		world.spawn_ring(global_position + Vector2(0, -40), 220.0, Color(1, 0.8, 0.35), 0.6)
+		world.spawn_text(global_position + Vector2(0, -150), Game.t("up_boss_undying"), Color(1, 0.85, 0.4))
 	hp_changed.emit()
 	if hp <= 0.0:
 		hp = 0.0
@@ -721,11 +857,43 @@ func apply_upgrade(id: String) -> void:
 		"venom": venom += 1
 		"thorns": thorns += 1
 		"cleave": cleave += 1
+		"rogue_ult_a", "mage_ult_a", "ranger_ult_a", "knight_ult_a":
+			cooldowns.ult *= 0.65
+			timers.ult = minf(timers.ult, cooldowns.ult * cd_mult)
+		"boss_undying": undying += 1
+		"boss_berserk":
+			damage *= 1.25
+			attack_cd *= 1.0 / 1.15
+		"boss_ascendance": cd_mult *= 0.75
+		"boss_colossus":
+			max_hp += 60.0
+			heal(60.0)
+			armor += 0.1
+		"boss_hunter":
+			crit_chance += 0.15
+			crit_mult += 0.5
+		"boss_crown":
+			xp_mult *= 1.35
+			pickup_range *= 1.5
 		"elixir": heal(max_hp * 0.5)
 		"temper": damage *= 1.05
 		"fortitude":
 			max_hp += 10.0
 			heal(10.0, false)
+	hp_changed.emit()
+
+
+func apply_minor(id: String) -> void:
+	## Small automatic boost on levels without a card choice.
+	minor_ups[id] = int(minor_ups.get(id, 0)) + 1
+	match id:
+		"minor_damage": damage *= 1.04
+		"minor_haste": attack_cd *= 1.0 / 1.04
+		"minor_health":
+			max_hp += 12.0
+			heal(12.0, false)
+		"minor_speed": move_speed *= 1.03
+		"minor_crit": crit_chance += 0.02
 	hp_changed.emit()
 
 

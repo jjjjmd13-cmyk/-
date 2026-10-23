@@ -13,6 +13,8 @@ class GravityWell extends Node2D:
 	var radius := 190.0
 	var duration := 3.0
 	var dmg_mult := 0.6
+	## Collapse branch: implodes for heavy damage when it ends.
+	var collapse := false
 	var _t := 0.0
 	var _tick := 0.0
 
@@ -20,6 +22,12 @@ class GravityWell extends Node2D:
 		_t += delta
 		if _t >= duration:
 			world.spawn_ring(global_position, radius, Color(0.55, 0.6, 1.0), 0.35)
+			if collapse:
+				Audio.play("explosion", -2.0)
+				world.shake(10.0)
+				world.spawn_burst(global_position, Color(0.6, 0.65, 1.0), 26, 460.0)
+				for e in world.enemies_in_radius(global_position, radius * 0.7):
+					world.player_hit_enemy(e, 3.5, (e.global_position - global_position).normalized() * 400.0)
 			queue_free()
 			return
 		_tick -= delta
@@ -102,7 +110,10 @@ class Snare extends Node2D:
 	var world: Node
 	var radius := 130.0
 	var duration := 2.6
+	## Thorn Trap branch: also cuts whatever stands in it.
+	var thorny := false
 	var _t := 0.0
+	var _tick := 0.5
 
 	func _ready() -> void:
 		_leaves = ART.stamp(self, "ranger", 3, radius * 2.2)
@@ -115,8 +126,14 @@ class Snare extends Node2D:
 		if _t >= duration:
 			queue_free()
 			return
+		_tick -= delta
+		var cut := thorny and _tick <= 0.0
+		if cut:
+			_tick = 0.5
 		for e in world.enemies_in_radius(global_position, radius):
 			e.apply_root(0.25)
+			if cut:
+				world.player_hit_enemy(e, 0.45, Vector2.ZERO)
 		queue_redraw()
 
 	func _draw() -> void:
@@ -157,3 +174,70 @@ class Smoke extends Node2D:
 		for p in _puffs:
 			var drift := Vector2(sin(_t * 1.5 + p.s) * 10.0, -_t * 14.0)
 			draw_circle(p.p + drift, p.r * (1.0 + _t * 0.15), Color(0.22, 0.2, 0.24, 0.35 * fade))
+
+
+## Rogue Choking Smoke: a lingering cloud that hurts and slows.
+class SmokeField extends Node2D:
+	var world: Node
+	var radius := 170.0
+	var duration := 3.5
+	var _t := 0.0
+	var _tick := 0.0
+	var _puffs: Array = []
+
+	func _ready() -> void:
+		for i in 16:
+			_puffs.append({"p": Vector2.from_angle(randf() * TAU) * randf_range(0.0, radius * 0.8),
+				"r": randf_range(34.0, 64.0), "s": randf() * TAU})
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= duration:
+			queue_free()
+			return
+		_tick -= delta
+		if _tick <= 0.0:
+			_tick = 0.5
+			for e in world.enemies_in_radius(global_position, radius):
+				world.player_hit_enemy(e, 0.5, Vector2.ZERO)
+				e.apply_slow(0.5, 0.6)
+		queue_redraw()
+
+	func _draw() -> void:
+		var fade := clampf((duration - _t) / 0.6, 0.0, 1.0) * clampf(_t / 0.2, 0.0, 1.0)
+		for p in _puffs:
+			var drift := Vector2(sin(_t * 1.3 + p.s) * 12.0, cos(_t * 1.1 + p.s) * 6.0)
+			draw_circle(p.p + drift, p.r, Color(0.2, 0.17, 0.2, 0.28 * fade))
+		draw_arc(Vector2.ZERO, radius, 0, TAU, 48, Color(0.75, 0.2, 0.28, 0.35 * fade), 1.5, true)
+
+
+## Mage Scorched Earth: burning ground left by Starfall.
+class Burn extends Node2D:
+	var world: Node
+	var radius := 160.0
+	var duration := 3.0
+	var _t := 0.0
+	var _tick := 0.25
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= duration:
+			queue_free()
+			return
+		_tick -= delta
+		if _tick <= 0.0:
+			_tick = 0.5
+			for e in world.enemies_in_radius(global_position, radius):
+				world.player_hit_enemy(e, 0.4, Vector2.ZERO)
+		queue_redraw()
+
+	func _draw() -> void:
+		var fade := clampf((duration - _t) / 0.6, 0.0, 1.0)
+		draw_circle(Vector2.ZERO, radius, Color(0.9, 0.35, 0.1, 0.1 * fade))
+		draw_arc(Vector2.ZERO, radius, 0, TAU, 56, Color(1.0, 0.55, 0.2, 0.5 * fade), 2.0, true)
+		for i in 12:
+			var a := i * 2.39996
+			var base := Vector2.from_angle(a) * radius * (0.2 + 0.7 * fmod(i * 0.37, 1.0))
+			var h := 10.0 + 8.0 * sin(_t * 9.0 + i)
+			draw_colored_polygon(PackedVector2Array([base + Vector2(-5, 0), base + Vector2(0, -h), base + Vector2(5, 0)]),
+				Color(1.0, 0.6 + 0.2 * sin(_t * 7.0 + i), 0.2, 0.7 * fade))

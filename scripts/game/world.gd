@@ -13,6 +13,7 @@ const FX := preload("res://scripts/game/fx.gd")
 const ART := preload("res://scripts/game/combat_art.gd")
 const Hud := preload("res://scripts/ui/hud.gd")
 const LevelUpMenu := preload("res://scripts/ui/levelup_menu.gd")
+const UPGRADES := preload("res://scripts/data/upgrades.gd")
 const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
 const EndScreen := preload("res://scripts/ui/end_screen.gd")
 
@@ -39,6 +40,14 @@ var _winning := false
 ## True after the player chose to keep going past the final wave.
 var endless := false
 var pending_levels := 0
+## Level numbers waiting for a card choice (every 5th guarantees a rare card).
+var _choice_levels: Array[int] = []
+## Legendary picks owed for beating the wave 5 and 10 bosses.
+var pending_boss_rewards := 0
+## Per-run card tools on the level-up screen.
+var rerolls_left := 3
+var banishes_left := 2
+var banned: Array = []
 var rng := RandomNumberGenerator.new()
 
 var _state_t := 2.0
@@ -391,6 +400,9 @@ func player_hit_enemy(e: Node, mult: float, knock: Vector2) -> void:
 	if e.dead or not is_instance_valid(player):
 		return
 	var roll: Array = player.roll_damage(mult)
+	if roll[1] and player.has_mod("evo_executioner") and e.hp < e.max_hp * 0.3:
+		# Executioner: crits on wounded foes hit twice as hard.
+		roll[0] *= 2.0
 	var dealt := damage_enemy(e, roll[0], roll[1], knock)
 	if player.lifesteal > 0.0:
 		player.heal(dealt * player.lifesteal, false)
@@ -432,6 +444,11 @@ func _on_enemy_died(e: Node) -> void:
 	if e.is_boss:
 		_on_boss_killed(e)
 		return
+	if is_instance_valid(player) and player.has_mod("evo_plague") and e.bleed_time > 0.0:
+		# Plague: the bleed jumps to everything nearby.
+		spawn_ring(e.global_position, 170.0, Color(0.5, 0.9, 0.3), 0.3)
+		for n in enemies_in_radius(e.global_position, 170.0):
+			n.apply_bleed(e.bleed_dps)
 	if _winning:
 		return
 	drop_xp(e.global_position, e.xp)
@@ -457,6 +474,10 @@ func _on_boss_killed(e: Node) -> void:
 	if wave >= TOTAL_WAVES and not endless:
 		_win()
 	else:
+		if wave == 5 or wave == 10:
+			pending_boss_rewards += 1
+			if _modal == null:
+				_open_levelup.call_deferred()
 		state = "intermission"
 		_state_t = 4.0
 		_hud.show_banner(Game.t("wave_cleared"), "")
@@ -492,13 +513,26 @@ func collect(p: Node) -> void:
 		Audio.play("levelup", -6.0, 0.0)
 		return
 	Audio.play("pickup", -8.0, 0.15)
-	player.xp += p.value
+	player.xp += int(round(p.value * player.xp_mult))
 	while player.xp >= player.xp_to_next():
 		player.xp -= player.xp_to_next()
 		player.level += 1
-		pending_levels += 1
+		if UPGRADES.is_choice_level(player.level):
+			pending_levels += 1
+			_choice_levels.append(player.level)
+		else:
+			_auto_level()
 	if pending_levels > 0 and _modal == null:
 		_open_levelup.call_deferred()
+
+
+func _auto_level() -> void:
+	## Levels without a card choice: a small boost, shown over the hero.
+	var id: String = UPGRADES.MINOR[rng.randi_range(0, UPGRADES.MINOR.size() - 1)]
+	player.apply_minor(id)
+	Audio.play("levelup", -10.0, 0.0)
+	spawn_ring(player.global_position + Vector2(0, -40), 90.0, Color(1, 0.85, 0.4), 0.35)
+	spawn_text(player.global_position + Vector2(0, -150), Game.t("lvl_auto") % [player.level, Game.t(id)], Color(1, 0.88, 0.5))
 
 
 # ------------------------------------------------------------------ spawning helpers
@@ -603,19 +637,31 @@ func enemies_in_radius(pos: Vector2, r: float) -> Array:
 
 # ------------------------------------------------------------------ menus / flow
 func _open_levelup() -> void:
-	if _modal != null or _ended or _winning or pending_levels <= 0 or player.dead:
+	if _modal != null or _ended or _winning or player.dead:
+		return
+	if pending_boss_rewards <= 0 and pending_levels <= 0:
 		return
 	Audio.play("levelup")
 	var m := LevelUpMenu.new()
 	m.world = self
+	if pending_boss_rewards > 0:
+		m.mode = "boss"
+	else:
+		var lvl: int = _choice_levels[0] if not _choice_levels.is_empty() else player.level
+		m.need_rare = lvl % 5 == 0
 	m.chosen.connect(_on_upgrade_chosen)
 	_show_modal(m)
 
 
 func _on_upgrade_chosen(id: String) -> void:
 	player.apply_upgrade(id)
-	pending_levels -= 1
-	if pending_levels > 0 and not _ended:
+	if (_modal as LevelUpMenu).mode == "boss":
+		pending_boss_rewards -= 1
+	else:
+		pending_levels -= 1
+		if not _choice_levels.is_empty():
+			_choice_levels.pop_front()
+	if (pending_levels > 0 or pending_boss_rewards > 0) and not _ended:
 		# Swap straight to the next card set without unpausing in between.
 		_modal.queue_free()
 		_modal = null
@@ -734,7 +780,7 @@ func _continue_endless() -> void:
 	_state_t = 3.0
 	_hud.show_banner(Game.t("endless_banner"), Game.t("endless_sub"), 3.0)
 	Audio.play_music("battle")
-	if pending_levels > 0:
+	if pending_levels > 0 or pending_boss_rewards > 0:
 		_open_levelup.call_deferred()
 
 

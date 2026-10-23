@@ -34,7 +34,7 @@ func _run() -> void:
 	# Level-up always offers three cards, even with every upgrade maxed.
 	var taken := {}
 	for u in UPGRADES.POOL:
-		taken[u.id] = u.max
+		taken[u.id] = UPGRADES.max_of(u)
 	check(UPGRADES.roll("knight", taken, 3, RandomNumberGenerator.new()).size() == 3, "three fallback cards")
 
 	# Thousand Cuts with nobody around keeps its cooldown.
