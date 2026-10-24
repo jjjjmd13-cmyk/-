@@ -1,0 +1,9 @@
+{
+  "frame_size": 512,
+  "body_height_target": 250,
+  "foot_baseline": 480.0,
+  "runtime": 10,
+  "alternative": 8,
+  "idle": 4,
+  "finish": "AI-assisted painted finish over Blender pose guides; not raw 3D renders"
+}

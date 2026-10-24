@@ -1,0 +1,16 @@
+{
+  "model": "Leon",
+  "renderer": "4.2.0",
+  "geometry": "Modeled meshes and joint pivots, no billboard or image-plane characters",
+  "reference": "Original Leon sprite and approved 3D look-development image",
+  "variants": [
+    8,
+    10
+  ],
+  "animations": [
+    "idle",
+    "run",
+    "attack"
+  ],
+  "runtime_frame_size": 384
+}

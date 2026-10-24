@@ -38,7 +38,8 @@ func _run() -> void:
 		player._using_pad = true
 		assert(player._visual.has_sprite(), "Hero is still using fallback art: " + hero)
 		for action in ["idle", "run", "attack"]:
-			assert(player._visual._sprite.sprite_frames.get_frame_count(action) == 4)
+			var expected := 10 if hero == "knight" and action != "idle" else 4
+			assert(player._visual._sprite.sprite_frames.get_frame_count(action) == expected)
 		for side in [-1, 1]:
 			player.aim_dir = Vector2(side, 0)
 			player._visual.facing = side
