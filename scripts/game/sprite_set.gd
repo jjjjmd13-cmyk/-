@@ -42,6 +42,8 @@ static func frames_for(group: String, id: String) -> SpriteFrames:
 		var count := maxi(1, tex.get_width() / size)
 		sf.add_animation(anim)
 		sf.set_animation_speed(anim, minf(FPS[anim], 4.0 if anim == "idle" else 8.0) if count == 4 else FPS[anim])
+		if group == "heroes" and id == "knight" and anim == "run" and count >= 8:
+			sf.set_animation_speed(anim, float(count) / 0.65)
 		sf.set_animation_loop(anim, LOOPING.has(anim))
 		for i in count:
 			var at := AtlasTexture.new()
