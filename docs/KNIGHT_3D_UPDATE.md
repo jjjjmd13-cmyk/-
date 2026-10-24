@@ -12,6 +12,8 @@
 
 기본 그림은 `assets/sprites/heroes/knight/`에 연결했습니다. 8프레임 대안은 `assets/sprites/variants/knight_8/`에 있습니다. 프레임은 512px 정사각형, 투명 PNG 가로 스트립입니다. 몸의 기준 높이는 약 250px이며, 검을 들었을 때 몸 전체가 작아지는 현상을 줄이도록 무기와 몸의 정렬 기준을 나눴습니다.
 
+머리 위로 검을 드는 자세는 별도 아틀라스에서 가져옵니다. 칼끝과 앞줄의 발이 겹치지 않도록 두 자세를 분리 제작했고, 머리부터 발바닥까지의 길이를 별도 기록해 무기 높이 때문에 몸이 축소되는 문제를 방지했습니다.
+
 기사에게는 기존 4프레임 그림용 다리 UV 압축·추가 들썩임을 적용하지 않습니다. 원래 그림으로 움직이는 다른 직업의 보정은 기존 경로를 사용합니다. 새 이동 한 주기에 발소리와 먼지는 두 번 발생합니다. 기본 공격·스킬의 피해와 판정은 기존 게임 코드가 담당합니다.
 
 ## 실제 제작 과정과 구분
@@ -28,6 +30,7 @@
 - 모델·클립·렌더 생성: [knight_production.py](../tools/blender/knight_production.py)
 - 보정 전 실제 렌더: [8프레임](../tools/art_sources/knight-3d/blender-guide-8.png), [10프레임](../tools/art_sources/knight-3d/blender-guide-10.png)
 - 보정 후 그림: [8프레임](../tools/art_sources/knight-3d/finished-8.png), [10프레임](../tools/art_sources/knight-3d/finished-10.png), [대기](../tools/art_sources/knight-3d/finished-idle.png)
+- 검을 들어 올리는 별도 자세: [finished-overhead.png](../tools/art_sources/knight-3d/finished-overhead.png)
 - 재패킹: `python3 tools/pack_knight_3d.py` (Pillow, numpy, scipy)
 
 Blender 재생성 예:

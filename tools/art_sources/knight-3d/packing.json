@@ -5,5 +5,14 @@
   "runtime": 10,
   "alternative": 8,
   "idle": 4,
+  "overhead_frames": {
+    "8": [
+      2
+    ],
+    "10": [
+      2,
+      3
+    ]
+  },
   "finish": "AI-assisted painted finish over Blender pose guides; not raw 3D renders"
 }

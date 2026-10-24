@@ -40,7 +40,7 @@ def atlas_cells(path, columns, rows):
     return result
 
 
-def prepare(cell):
+def body_core(cell):
     alpha = np.array(cell.getchannel('A'))
     mask = alpha > 48
     eroded = binary_erosion(mask, iterations=max(2, round(cell.width*.016)))
@@ -50,6 +50,15 @@ def prepare(cell):
     body = labels == sizes.argmax()
     ys, xs = np.where(body)
     top, bottom = int(ys.min()), int(ys.max())+1
+    return body, top, bottom
+
+
+def prepare(cell, body_height_hint=None):
+    body, top, bottom = body_core(cell)
+    # A broad blade can survive erosion and join the raised hands. For these
+    # reviewed overhead poses, measure the body using the other attack poses.
+    if body_height_hint is not None:
+        top = bottom-round(body_height_hint)
     band = body[top:top+max(1, round((bottom-top)*.3))]
     anchor_x = float(np.median(np.where(band)[1]))
     body_height = bottom-top
@@ -83,8 +92,18 @@ def strip(path, frames):
 
 
 def main():
+    # Raised weapons have dedicated source cells so their tips cannot collide
+    # with the previous row's feet. Head-to-sole measurements are reviewed once
+    # on that source atlas and retained alongside it.
+    anchors = json.loads((SOURCE/'overhead-anchors.json').read_text())
+    raised = atlas_cells(SOURCE/'finished-overhead.png',2,1)
+    raised_frames = [prepare(cell,anchor['body_height']) for cell,anchor in zip(raised,anchors)]
     for n in [8,10]:
-        frames = [prepare(cell) for cell in atlas_cells(SOURCE/f'finished-{n}.png',n//2,4)]
+        cells = atlas_cells(SOURCE/f'finished-{n}.png',n//2,4)
+        overhead = [2] if n == 8 else [2,3]
+        frames = [None if i-n in overhead else prepare(cell) for i,cell in enumerate(cells)]
+        for j,index in enumerate(overhead):
+            frames[n+index] = raised_frames[j]
         assert len(frames)==n*2
         folder = ROOT / ('assets/sprites/heroes/knight' if n==10 else 'assets/sprites/variants/knight_8')
         for j,anim in enumerate(['run','attack']):
@@ -94,6 +113,7 @@ def main():
     shutil.copyfile(ROOT/'assets/sprites/heroes/knight/idle.png',ROOT/'assets/sprites/variants/knight_8/idle.png')
     (SOURCE/'packing.json').write_text(json.dumps({'frame_size':SIZE,'body_height_target':250,
         'foot_baseline':SIZE*15/16,'runtime':10,'alternative':8,'idle':4,
+        'overhead_frames':{'8':[2],'10':[2,3]},
         'finish':'AI-assisted painted finish over Blender pose guides; not raw 3D renders'},indent=2)+'\n')
     print('KNIGHT PACK OK: default 10 run/attack, alternative 8, idle 4')
 
