@@ -72,12 +72,13 @@ def keep_main_parts(cell):
     return Image.fromarray(out)
 
 
-def cells(image, top, bottom):
-    """Imagegen may return a canvas a few pixels off the requested dimensions."""
+def cells(image, top, bottom, columns=4):
+    """Slices one row of `columns` frames (4 today; 8-frame sheets work the same).
+    Imagegen may return a canvas a few pixels off the requested dimensions."""
     result = []
-    for col in range(4):
-        cell = keep_main_parts(image.crop((round(col * image.width / 4), top,
-                                           round((col + 1) * image.width / 4), bottom)))
+    for col in range(columns):
+        cell = keep_main_parts(image.crop((round(col * image.width / columns), top,
+                                           round((col + 1) * image.width / columns), bottom)))
         alpha = np.asarray(cell.getchannel("A"))
         ys, xs = np.where(alpha > 32)
         assert len(xs), "Empty generated frame"

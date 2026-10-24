@@ -96,3 +96,47 @@ static func play(s: AnimatedSprite2D, anim: String, duration: float = 0.0) -> vo
 	if s.animation != real or not s.is_playing():
 		s.play(real)
 	s.speed_scale = speed
+
+
+static var _hips := {}
+
+
+static func hip_line(s: AnimatedSprite2D, anim: String) -> float:
+	## Where the legs begin in this animation's frames (0..1 of the frame height),
+	## measured once from the art: a little over half way down the body.
+	var tex := s.sprite_frames.get_frame_texture(anim, 0) as AtlasTexture
+	if tex == null:
+		return 0.66
+	var key := tex.atlas.resource_path
+	if not _hips.has(key):
+		var img := tex.atlas.get_image()
+		if img.is_compressed():
+			img = img.duplicate()
+			img.decompress()
+		var size := int(tex.region.size.y)
+		var top := size
+		var bottom := 0
+		for y in range(0, size, 2):
+			for x in range(0, size, 3):
+				if img.get_pixel(int(tex.region.position.x) + x, y).a > 0.4:
+					top = mini(top, y)
+					bottom = maxi(bottom, y)
+					break
+		_hips[key] = (top + (bottom - top) * 0.56) / float(size) if bottom > top else 0.66
+	return _hips[key]
+
+
+static func set_stride(s: AnimatedSprite2D, stride: float) -> void:
+	## Scissors the legs of the current frame (1 = as drawn, smaller = legs together).
+	var mat := s.material as ShaderMaterial
+	if mat == null:
+		return
+	if stride >= 0.999:
+		mat.set_shader_parameter("stride", 1.0)
+		return
+	var tex := s.sprite_frames.get_frame_texture(s.animation, s.frame) as AtlasTexture
+	if tex == null:
+		return
+	mat.set_shader_parameter("frame_w", tex.region.size.x / float(tex.atlas.get_width()))
+	mat.set_shader_parameter("hip", hip_line(s, s.animation))
+	mat.set_shader_parameter("stride", stride)

@@ -64,7 +64,6 @@ var _state_t := 0.0
 var _charge_dir := Vector2.ZERO
 ## Direction the shield bearer is facing (turns slowly so it can be flanked).
 var _facing := Vector2.RIGHT
-var _fuse_tel: Node2D
 var _minions: Array = []
 
 
@@ -108,14 +107,11 @@ func _ready() -> void:
 	if sprite:
 		if elite:
 			sprite.scale *= 1.3
+		sprite.set_meta("base_scale", sprite.scale)
 		sprite.use_parent_material = false
 		sprite.material = ART.actor_material(false, elite or is_boss)
 		_visual.sprite = sprite
 		_visual.add_child(sprite)
-	if kind == "archer" or kind == "cultist":
-		var tell := AimTell.new()
-		tell.enemy = self
-		add_child(tell)
 
 
 func _physics_process(delta: float) -> void:
@@ -247,13 +243,7 @@ func _brute_ai(to_player: Vector2, dist: float, delta: float) -> Vector2:
 		_state = "windup"
 		_state_t = 0.65
 		_charge_dir = to_player.normalized()
-		var tel = FX.LineTelegraph.new()
-		tel.length = speed * 5.0 * 0.55 + radius
-		tel.width = radius * 2.0
-		tel.duration = 0.65
-		tel.rotation = _charge_dir.angle()
-		tel.position = global_position
-		world.add_ground_fx(tel)
+		Audio.play("roar", -14.0, 0.2)
 		return Vector2.ZERO
 	return to_player.normalized() * speed
 
@@ -286,20 +276,18 @@ func _wraith_ai(to_player: Vector2, dist: float, delta: float) -> Vector2:
 	return (to_player.normalized() + drift).normalized() * speed
 
 
-func _bomber_ai(to_player: Vector2, dist: float, _delta: float) -> Vector2:
-	## Runs at the player, then stops and detonates after a visible fuse.
+func _bomber_ai(to_player: Vector2, dist: float, delta: float) -> Vector2:
+	## Runs at the player, then stops and detonates after a fuse: it swells and
+	## blinks instead of drawing a circle on the ground.
 	if _state == "fuse":
+		_state_t -= delta
+		if _state_t <= 0.0:
+			_explode()
 		return Vector2.ZERO
 	if dist < 95.0:
 		_state = "fuse"
+		_state_t = FUSE_TIME
 		Audio.play("enemy_shot", 0.0, 0.0)
-		var tel = FX.Telegraph.new()
-		tel.radius = BOMB_RADIUS
-		tel.duration = 0.85
-		tel.position = global_position
-		tel.on_done = _explode
-		world.add_ground_fx(tel)
-		_fuse_tel = tel
 		return Vector2.ZERO
 	return to_player.normalized() * speed
 
@@ -307,7 +295,6 @@ func _bomber_ai(to_player: Vector2, dist: float, _delta: float) -> Vector2:
 func _explode() -> void:
 	if dead:
 		return
-	_fuse_tel = null
 	Audio.play("explosion", -2.0)
 	world.shake(9.0)
 	world.spawn_ring(global_position, BOMB_RADIUS, Color(1, 0.3, 0.15), 0.35)
@@ -401,8 +388,6 @@ func die() -> void:
 	if dead:
 		return
 	dead = true
-	if is_instance_valid(_fuse_tel):
-		_fuse_tel.queue_free()
 	died.emit(self)
 	queue_free()
 
@@ -417,35 +402,9 @@ func redraws_every_frame() -> bool:
 	return kind in ["bat", "wraith", "bomber", "necro"]
 
 
-## Seconds of warning before an archer or cultist fires.
+## Seconds of warning before an archer or cultist fires (the monster glows).
 const AIM_TELL := 0.5
-
-
-## Ranged monsters glow and sight a line at the hero just before they shoot.
-class AimTell extends Node2D:
-	var enemy: Node
-
-	func _ready() -> void:
-		z_as_relative = false
-		z_index = 34
-
-	func _process(_delta: float) -> void:
-		queue_redraw()
-
-	func _draw() -> void:
-		var e = enemy
-		if e.dead or e._shot_cd > AIM_TELL or not is_instance_valid(e.world.player) or e.world.player.dead:
-			return
-		var to: Vector2 = e.world.player.global_position - e.global_position
-		if to.length() > e._stats().range + 80.0:
-			return
-		var k: float = 1.0 - e._shot_cd / AIM_TELL
-		var col := Color(0.4, 0.9, 1.0) if e.kind == "archer" else Color(1, 0.4, 0.85)
-		var muzzle := Vector2(0, -30 if e.kind == "archer" else -40)
-		var dir := (to + Vector2(0, -40) - muzzle).normalized()
-		draw_line(muzzle, muzzle + dir * (80.0 + 160.0 * k), Color(col, 0.18 + 0.32 * k), 2.0 + 2.0 * k, true)
-		draw_circle(muzzle, 8.0 + 10.0 * k, Color(col, 0.25 * k))
-		draw_circle(muzzle, 4.0 + 3.0 * k, Color(1, 1, 1, 0.5 + 0.5 * k))
+const FUSE_TIME := 0.85
 
 
 ## Draws the enemy. Static kinds draw once and animate via transform.
@@ -457,7 +416,21 @@ class Visual extends Node2D:
 	func _process(_delta: float) -> void:
 		var e = enemy
 		if sprite:
-			(sprite.material as ShaderMaterial).set_shader_parameter("hit_flash", 1.0 if e._flash > 0 else 0.0)
+			var flash: bool = e._flash > 0
+			# Warnings live on the monster itself, not as shapes on the ground.
+			var tint := Color.WHITE
+			match e._state:
+				"fuse":
+					var k: float = 1.0 - e._state_t / FUSE_TIME
+					flash = flash or fmod(e._anim * (6.0 + 18.0 * k), 1.0) < 0.5
+					sprite.scale = sprite.get_meta("base_scale", sprite.scale) * (1.0 + 0.25 * k)
+				"windup":
+					tint = Color(1.0, 0.45, 0.4)
+					position.x = sin(e._anim * 70.0) * 3.0
+			if (e.kind == "archer" or e.kind == "cultist") and e._shot_cd < AIM_TELL:
+				tint = Color(0.6, 1.0, 1.0) if e.kind == "archer" else Color(1.0, 0.6, 1.0)
+			sprite.self_modulate = tint
+			(sprite.material as ShaderMaterial).set_shader_parameter("hit_flash", 1.0 if flash else 0.0)
 			var action: bool = ACTION_STATES.has(e._state)
 			if e._state == "intro":
 				SpriteSet.play(sprite, "idle")
@@ -469,16 +442,20 @@ class Visual extends Node2D:
 				queue_redraw()
 		elif e.redraws_every_frame():
 			queue_redraw()
-		# Cheap walk animation: bob and sway.
-		var t: float = e._anim * 9.0 + e._wobble_seed
+		# Walk: bob, rock and scissor the legs (bosses take slow, heavy steps).
+		var t: float = e._anim * (5.0 if e.is_boss else 9.0) + e._wobble_seed
 		match e.kind:
 			"bat":
 				position.y = sin(t * 0.5) * 6.0
 			"wraith":
 				position.y = sin(t * 0.3) * 5.0 - 6.0
 			_:
-				position.y = -absf(sin(t)) * 3.0
-				rotation = sin(t) * 0.06
+				var moving: bool = e.velocity.length() > 15.0 and not ACTION_STATES.has(e._state)
+				var air := absf(sin(t)) if moving else 0.0
+				position.y = -air * (7.0 if e.is_boss else 3.0)
+				rotation = sin(t) * (0.05 if e.is_boss else 0.06) if moving else 0.0
+				if sprite:
+					SpriteSet.set_stride(sprite, 1.0 - (0.6 if e.is_boss else 0.5) * air)
 
 	func _draw() -> void:
 		var e = enemy

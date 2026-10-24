@@ -25,9 +25,13 @@ func frames(n: int) -> void:
 func grab(w: Node, name: String) -> void:
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
-	# The camera follows the hero, so the hero is near the middle of the screen.
-	var c := img.get_size() / 2
-	var rect := Rect2i(c.x - img.get_width() / 5, c.y - img.get_height() / 4, img.get_width() * 2 / 5, img.get_height() / 3)
+	# Crop around the hero (or the boss) wherever the camera has them.
+	var target: Node2D = w.player if w.boss == null else w.boss
+	var pos: Vector2 = get_viewport().get_canvas_transform() * target.global_position
+	pos *= Vector2(img.get_size()) / get_viewport().get_visible_rect().size
+	var half := Vector2i(img.get_width() / 10, img.get_height() / 7)
+	var rect := Rect2i(Vector2i(pos) - Vector2i(half.x, half.y * 2), Vector2i(half.x * 2, half.y * 5 / 2))
+	rect = rect.intersection(Rect2i(Vector2i.ZERO, img.get_size()))
 	img.get_region(rect).save_png(output.path_join(name + ".png"))
 
 func _run(heroes: Array) -> void:
@@ -63,5 +67,26 @@ func _run(heroes: Array) -> void:
 		Input.action_release("attack")
 		main._on_exit("menu")
 		await frames(4)
+	# A boss walking towards the hero.
+	Game.selected_hero = "knight"
+	main.start_run()
+	await frames(5)
+	var bw: Node = main._current
+	bw._state_t = 999
+	bw._hud._canvas.banner_t = 99
+	for c in bw._entities.get_children():
+		if c != bw.player:
+			c.queue_free()
+	bw.player.set_physics_process(false)
+	var boss: Node = bw.spawn_enemy_at("dread_knight", bw.player.position + Vector2(520, 0))
+	bw.boss = boss
+	boss.max_hp = 1e6
+	boss.hp = 1e6
+	await frames(150)
+	for i in 10:
+		await grab(bw, "boss_walk_%02d" % i)
+		await frames(4)
+	main._on_exit("menu")
+	await frames(4)
 	print("MOTION PREVIEW OK")
 	Game.quit_game()

@@ -121,6 +121,7 @@ func _animate_body() -> void:
 	var push := 0.0
 	var bob := 0.0
 	var squash := Vector2.ONE
+	var stride := 1.0
 	var ranged := hero_id == "mage" or hero_id == "ranger"
 	if dead:
 		pass
@@ -148,8 +149,11 @@ func _animate_body() -> void:
 		var u := (_sprite.frame + _sprite.frame_progress) / 2.0
 		var step := int(u)
 		var air := sin(PI * fposmod(u, 1.0))
-		bob = -8.0 * air
-		lean = 0.08
+		bob = -10.0 * air
+		# Legs pull together as one passes the other, then spread for the next stride,
+		# and the body rocks a little towards the stepping side.
+		stride = 1.0 - 0.72 * air
+		lean = 0.08 + (0.045 if step % 2 == 0 else -0.045) * air
 		squash = Vector2(1.0 - 0.025 * air, 1.0 + 0.035 * air)
 		if air < 0.35:
 			squash = Vector2(1.0 + 0.05 * (1.0 - air / 0.35), 1.0 - 0.045 * (1.0 - air / 0.35))
@@ -163,6 +167,7 @@ func _animate_body() -> void:
 	_lean = lerpf(_lean, lean, blend)
 	_push = lerpf(_push, push, clampf(dt * 30.0, 0.0, 1.0))
 	_squash = _squash.lerp(squash, clampf(dt * 25.0, 0.0, 1.0))
+	SpriteSet.set_stride(_sprite, stride)
 	_sprite.rotation = _lean * facing
 	_sprite.position = Vector2(_push * facing, bob)
 	_sprite.scale = _base_scale * _squash
