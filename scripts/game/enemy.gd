@@ -49,6 +49,8 @@ var root_t := 0.0
 ## Outside pull applied this frame (e.g. a gravity well).
 var _ext_pull := Vector2.ZERO
 var contact_cd := 0.0
+## Blew itself up (bomber) rather than being killed by the hero.
+var self_destructed := false
 var bleed_dps := 0.0
 var bleed_time := 0.0
 var _bleed_tick := 0.0
@@ -308,6 +310,7 @@ func _explode() -> void:
 		if e != self and not e.is_boss:
 			world.damage_enemy(e, damage * 1.5, false, (e.global_position - global_position).normalized() * 200.0)
 	xp = 0
+	self_destructed = true
 	die()
 
 

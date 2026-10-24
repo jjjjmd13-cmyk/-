@@ -436,7 +436,10 @@ func damage_enemy(e: Node, amount: float, crit: bool, knock: Vector2, is_dot: bo
 
 func _on_enemy_died(e: Node) -> void:
 	enemies.erase(e)
-	kills += 1
+	# Only the hero's kills count: not bombers blowing themselves up or the
+	# horde collapsing when the final boss falls.
+	if not e.self_destructed and not _winning:
+		kills += 1
 	if is_instance_valid(player):
 		player.on_kill()
 	Audio.play("enemy_die", -6.0)
