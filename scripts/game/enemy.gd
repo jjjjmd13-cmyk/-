@@ -415,10 +415,20 @@ class Visual extends Node2D:
 	var enemy: Node
 	## Sprite-sheet art, when this kind has some (otherwise drawn in code).
 	var sprite: AnimatedSprite2D
+	var _art_action := ""
+	var _art_duration := 0.3
+	var _last_contact_cd := 0.0
+	var _contact_anim_left := 0.0
 
 	func _process(_delta: float) -> void:
 		var e = enemy
+		if e.contact_cd > _last_contact_cd + 0.1:
+			_contact_anim_left = 0.3
+			_art_action = ""
+		_last_contact_cd = e.contact_cd
+		_contact_anim_left = maxf(0.0, _contact_anim_left - _delta)
 		if sprite:
+			position.x = 0.0
 			var flash: bool = e._flash > 0
 			# Warnings live on the monster itself, not as shapes on the ground.
 			var tint := Color.WHITE
@@ -434,15 +444,27 @@ class Visual extends Node2D:
 				tint = Color(0.6, 1.0, 1.0) if e.kind == "archer" else Color(1.0, 0.6, 1.0)
 			sprite.self_modulate = tint
 			(sprite.material as ShaderMaterial).set_shader_parameter("hit_flash", 1.0 if flash else 0.0)
-			var action: bool = ACTION_STATES.has(e._state)
+			var aiming: bool = e.kind in ["archer", "cultist"] and e._shot_cd < AIM_TELL
+			var action: bool = ACTION_STATES.has(e._state) or aiming or _contact_anim_left > 0.0
 			if e._state == "intro":
 				SpriteSet.play(sprite, "idle")
 			elif action:
-				SpriteSet.play(sprite, "cast" if e.is_boss else "attack")
+				var key: String = "aim" if aiming else (e._state if ACTION_STATES.has(e._state) else "contact")
+				if key != _art_action:
+					_art_action = key
+					_art_duration = AIM_TELL if aiming else (0.3 if key == "contact" else maxf(e._state_t, 0.2))
+					sprite.stop()
+				SpriteSet.play(sprite, "cast" if e.is_boss else "attack", _art_duration)
 			else:
-				SpriteSet.play(sprite, "run")
+				_art_action = ""
+				SpriteSet.play(sprite, "run" if e.velocity.length() > 10.0 else "idle")
 			if e.elite:
 				queue_redraw()
+			if SpriteSet.has_authored_motion(sprite):
+				SpriteSet.set_stride(sprite, 1.0)
+				position.y = 0.0
+				rotation = 0.0
+				return
 		elif e.redraws_every_frame():
 			queue_redraw()
 		# Walk: bob, rock and scissor the legs (bosses take slow, heavy steps).

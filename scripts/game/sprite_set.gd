@@ -42,9 +42,14 @@ static func frames_for(group: String, id: String) -> SpriteFrames:
 		var count := maxi(1, tex.get_width() / size)
 		sf.add_animation(anim)
 		sf.set_animation_speed(anim, minf(FPS[anim], 4.0 if anim == "idle" else 8.0) if count == 4 else FPS[anim])
-		if group == "heroes" and id == "knight" and anim == "run" and count >= 8:
-			sf.set_animation_speed(anim, float(count) / 0.65)
+		if anim == "run" and count >= 8:
+			var cycle := 0.85 if group == "bosses" else (0.5 if id == "bat" else 0.65)
+			sf.set_animation_speed(anim, float(count) / cycle)
+		elif anim == "idle" and count == 5:
+			sf.set_animation_speed(anim, float(count) / 1.2)
 		sf.set_animation_loop(anim, LOOPING.has(anim))
+		if anim == "cast" and count >= 8:
+			sf.set_animation_loop(anim, false)
 		for i in count:
 			var at := AtlasTexture.new()
 			at.atlas = tex
@@ -92,7 +97,7 @@ static func play(s: AnimatedSprite2D, anim: String, duration: float = 0.0) -> vo
 	if real == "":
 		return
 	var speed := 1.0
-	if duration > 0.0 and not LOOPING.has(real):
+	if duration > 0.0 and not s.sprite_frames.get_animation_loop(real):
 		var frames := s.sprite_frames.get_frame_count(real)
 		speed = (frames / s.sprite_frames.get_animation_speed(real)) / duration
 	if s.animation != real or not s.is_playing():
@@ -142,3 +147,7 @@ static func set_stride(s: AnimatedSprite2D, stride: float) -> void:
 	mat.set_shader_parameter("frame_w", tex.region.size.x / float(tex.atlas.get_width()))
 	mat.set_shader_parameter("hip", hip_line(s, s.animation))
 	mat.set_shader_parameter("stride", stride)
+
+
+static func has_authored_motion(s: AnimatedSprite2D) -> bool:
+	return s.sprite_frames.has_animation("run") and s.sprite_frames.get_frame_count("run") >= 8

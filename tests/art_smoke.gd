@@ -23,7 +23,7 @@ func shot(label: String) -> void:
 	if output.is_empty():
 		return
 	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png(output.path_join(label + ".png"))
+	get_viewport().get_texture().get_image().save_jpg(output.path_join(label + ".jpg"), 0.93)
 
 func _run() -> void:
 	await frames(5)
@@ -38,7 +38,7 @@ func _run() -> void:
 		player._using_pad = true
 		assert(player._visual.has_sprite(), "Hero is still using fallback art: " + hero)
 		for action in ["idle", "run", "attack"]:
-			var expected := 10 if hero == "knight" and action != "idle" else 4
+			var expected := 5 if action == "idle" else 10
 			assert(player._visual._sprite.sprite_frames.get_frame_count(action) == expected)
 		for side in [-1, 1]:
 			player.aim_dir = Vector2(side, 0)

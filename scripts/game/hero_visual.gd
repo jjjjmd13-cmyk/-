@@ -115,10 +115,8 @@ func _update_sprite() -> void:
 
 
 func _animate_body() -> void:
-	## The strips have few frames, so the body motion between them is done here.
-	# The new Leon frames already contain body lean, knee articulation and cape
-	# motion. Applying the old four-frame warp again crushes his actual strides.
-	if hero_id == "knight" and _sprite.sprite_frames.get_frame_count("run") >= 8:
+	## Authored joint motion must not receive the legacy four-frame warp again.
+	if SpriteSet.has_authored_motion(_sprite):
 		SpriteSet.set_stride(_sprite, 1.0)
 		_sprite.rotation = 0.0
 		_sprite.position = Vector2.ZERO
