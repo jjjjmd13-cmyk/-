@@ -115,7 +115,19 @@ func _update_sprite() -> void:
 
 
 func _animate_body() -> void:
-	## The strips have few frames, so the body motion between them is done here.
+	## Authored joint motion must not receive the legacy four-frame warp again.
+	if SpriteSet.has_authored_motion(_sprite):
+		SpriteSet.set_stride(_sprite, 1.0)
+		_sprite.rotation = 0.0
+		_sprite.position = Vector2.ZERO
+		_sprite.scale = _base_scale
+		if moving and _sprite.animation == "run":
+			var count := _sprite.sprite_frames.get_frame_count("run")
+			var step := int((_sprite.frame + _sprite.frame_progress) * 2.0 / count)
+			if step != _step_index:
+				_step_index = step
+				footstep.emit()
+		return
 	var dt := get_process_delta_time()
 	var lean := 0.0
 	var push := 0.0

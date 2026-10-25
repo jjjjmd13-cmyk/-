@@ -1,0 +1,189 @@
+[
+  {
+    "group": "heroes",
+    "id": "knight",
+    "family": "armor",
+    "weapon": "sword",
+    "size": 640,
+    "height": 290,
+    "description": "adult brown-haired man with stubble, silver steel and antique gold lion plate armor, ivory fur collar, crimson cape, two-handed steel greatsword; tall realistic adult anatomy, long thighs and calves, legs 53 percent of standing height",
+    "move": "grounded alternating running steps, knees flex backward",
+    "attack": "compact two-handed diagonal greatsword slash and recovery"
+  },
+  {
+    "group": "heroes",
+    "id": "ranger",
+    "family": "leather",
+    "weapon": "bow",
+    "size": 640,
+    "height": 280,
+    "description": "adult brown-haired female elf, olive cape, brown leather bronze armor, quiver and ornate gold wooden bow",
+    "move": "nimble alternating running steps",
+    "attack": "nock arrow, draw bow to cheek, release, recover"
+  },
+  {
+    "group": "heroes",
+    "id": "mage",
+    "family": "robe",
+    "weapon": "staff",
+    "size": 640,
+    "height": 275,
+    "description": "adult silver-blonde female mage, ivory navy gold flowing gown, gold staff with blue orb",
+    "move": "purposeful stepping, robe and hair swaying",
+    "attack": "gather free hand, extend palm with tiny blue magic, recover"
+  },
+  {
+    "group": "heroes",
+    "id": "rogue",
+    "family": "leather",
+    "weapon": "daggers",
+    "size": 640,
+    "height": 275,
+    "description": "adult hooded masked assassin, dark bronze leather armor, wine red torn cloak, two curved steel daggers, athletic long legs",
+    "move": "low agile alternating running steps",
+    "attack": "guard, step-lunge, primary dagger slash then short offhand cut, recover"
+  },
+  {
+    "group": "enemies",
+    "id": "ghoul",
+    "family": "ghoul",
+    "weapon": "claws",
+    "size": 320,
+    "height": 155,
+    "description": "hunched pale grey-green corpse ghoul, exposed sinews red wounds, ragged dark cloth, long bony claws; NO wings",
+    "move": "predatory scuttling",
+    "attack": "pull claws back, swipe forward, recover"
+  },
+  {
+    "group": "enemies",
+    "id": "bat",
+    "family": "bat",
+    "weapon": "bite",
+    "size": 320,
+    "height": 150,
+    "description": "dark furry vampire bat, red eyes, pointed ears fangs, broad burgundy membranous wings with finger bones",
+    "move": "complete wingbeat upstroke and downstroke",
+    "attack": "flare wings, short forward bite dive, recover"
+  },
+  {
+    "group": "enemies",
+    "id": "archer",
+    "family": "skeleton",
+    "weapon": "bow",
+    "size": 320,
+    "height": 165,
+    "description": "skeletal undead archer, bone skull ribs, ragged brown red cloak, quiver worn curved bow",
+    "move": "skeletal alternating steps with bow always retained",
+    "attack": "nock draw release bow then recover"
+  },
+  {
+    "group": "enemies",
+    "id": "brute",
+    "family": "brute",
+    "weapon": "club",
+    "size": 448,
+    "height": 240,
+    "description": "massive grey horned ogre, thick arms scarred belly, leather straps skull belt, iron spiked club",
+    "move": "heavy lumbering steps",
+    "attack": "compact club windup, overhead smash, recover"
+  },
+  {
+    "group": "enemies",
+    "id": "cultist",
+    "family": "robe",
+    "weapon": "staff",
+    "size": 384,
+    "height": 175,
+    "description": "faceless hooded cultist, crimson black robes gold trim, crimson orb staff; NO wings",
+    "move": "measured robed steps",
+    "attack": "gather free hand, extend small crimson ritual light, recover"
+  },
+  {
+    "group": "enemies",
+    "id": "wraith",
+    "family": "ghost",
+    "weapon": "claws",
+    "size": 384,
+    "height": 180,
+    "description": "faceless blue hooded ghost, skeletal reaching hands, spectral cloak dissolving into wisps; NO legs",
+    "move": "floating torso bob and curling lower wisps",
+    "attack": "hands inward, reach and sweep spectral claws, recover"
+  },
+  {
+    "group": "enemies",
+    "id": "bomber",
+    "family": "ghoul",
+    "weapon": "bomb",
+    "size": 384,
+    "height": 180,
+    "description": "pale ragged corpse, red glowing chest wound, TWO iron explosive cylinders strapped to back, leather harness long corpse fingers",
+    "move": "urgent hunched running with heavy tanks",
+    "attack": "brace, hunch around glowing chest, raise arms, contract, recover; NO full explosion"
+  },
+  {
+    "group": "enemies",
+    "id": "shield",
+    "family": "armor",
+    "weapon": "shield",
+    "size": 448,
+    "height": 215,
+    "description": "black iron armored undead, closed slit helmet, battered rectangular tower shield with bronze rim, steel sword, dark red cape",
+    "move": "defended alternating steps",
+    "attack": "brace, shield bash, short sword followthrough, recover"
+  },
+  {
+    "group": "enemies",
+    "id": "necro",
+    "family": "skeleton",
+    "weapon": "staff",
+    "size": 384,
+    "height": 195,
+    "description": "skeletal necromancer exposed skull ribs, black red hooded robe, bone staff with red orb",
+    "move": "measured skeletal robed steps",
+    "attack": "raise free skeletal hand, tiny red summoning magic, extend fingers, recover"
+  },
+  {
+    "group": "enemies",
+    "id": "skeleton",
+    "family": "skeleton",
+    "weapon": "sword",
+    "size": 320,
+    "height": 150,
+    "description": "skeletal foot soldier, weathered bone skull ribs articulated limbs, ragged brown waistcloth, curved steel sword",
+    "move": "quick alternating bony steps",
+    "attack": "compact sword guard, slash right, recover"
+  },
+  {
+    "group": "bosses",
+    "id": "dread_knight",
+    "family": "armor",
+    "weapon": "sword",
+    "size": 768,
+    "height": 440,
+    "description": "imposing horned black spiked plate knight, red glowing eyes, ragged crimson cape, black greatsword with crimson cracks",
+    "move": "heavy marching steps",
+    "attack": "haul greatsword back, powerful diagonal two-handed slash, recover"
+  },
+  {
+    "group": "bosses",
+    "id": "blood_witch",
+    "family": "ghost",
+    "weapon": "staff",
+    "size": 768,
+    "height": 420,
+    "description": "pale regal red-haired floating witch, crimson black shredded gown, red crown circular thorn halo, small floating crimson blades",
+    "move": "graceful hovering, gown hair flowing",
+    "attack": "hands inward, gather compact blood magic, extend right hand, recover"
+  },
+  {
+    "group": "bosses",
+    "id": "void_lord",
+    "family": "ghost",
+    "weapon": "staff",
+    "size": 768,
+    "height": 500,
+    "description": "faceless shadow monarch, black gold ribbed armor, tall spiked crown, long violet tendril cloak, black staff with purple orb",
+    "move": "ominous gliding hover, curling cloak",
+    "attack": "gather free hand to chest, extend tiny violet spell, recover"
+  }
+]
