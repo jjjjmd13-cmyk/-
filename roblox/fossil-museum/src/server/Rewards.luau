@@ -12,6 +12,8 @@ local Rewards = {}
 export type Options = {
 	helper: boolean?,
 	helperName: string?,
+	share: number?, -- 같이 팠을 때 내 몫 (0~1+, 보너스 포함). 없으면 1
+	coop: boolean?, -- 2명 이상이 같이 팠는지
 }
 
 function Rewards.Dig(player: Player, data: any, kindId: string, zoneId: string, position: Vector3, options: Options?)
@@ -21,7 +23,8 @@ function Rewards.Dig(player: Player, data: any, kindId: string, zoneId: string, 
 	local passes = Passes.Get(player)
 	local tool = Config.ToolsById[data.tool] or Config.Tools[1]
 
-	local coins = math.floor(kind.coins * zone.coinMult * (1 + tool.power * 0.1) * Economy.GetCoinMultiplier(data))
+	local share = opts.share or 1
+	local coins = math.floor(kind.coins * zone.coinMult * (1 + tool.power * 0.1) * Economy.GetCoinMultiplier(data) * share)
 	data.coins += coins
 	data.stats.totalEarned += coins
 
@@ -37,8 +40,8 @@ function Rewards.Dig(player: Player, data: any, kindId: string, zoneId: string, 
 		QuestService.Progress(player, "Meteor")
 	end
 
-	local result: { [string]: any } = { kind = "Dig", coins = coins, position = position, helper = opts.helper == true }
-	local pieceChance = kind.pieceChance * (if opts.helper then Config.HelperPieceChance else 1)
+	local result: { [string]: any } = { kind = "Dig", coins = coins, position = position, helper = opts.helper == true, coop = opts.coop == true }
+	local pieceChance = math.min(1, kind.pieceChance * (if opts.helper then Config.HelperPieceChance else 1) * share)
 	local foundPiece = false
 
 	if math.random() < pieceChance then

@@ -195,6 +195,9 @@ notifyRemote.OnClientEvent:Connect(function(payload: any)
 			HelperVisuals.Hop(player)
 		end
 		Effects.FloatText(payload.position, "+" .. Util.FormatNumber(payload.coins) .. " 💰", Color3.fromRGB(255, 220, 80))
+		if payload.coop then
+			Effects.FloatText(payload.position + Vector3.new(0, 1.5, 0), "🤝 함께 발굴! +20%", Color3.fromRGB(140, 230, 255))
+		end
 		if payload.speciesId then
 			local species = Config.SpeciesById[payload.speciesId]
 			local rarity = Config.RarityById[species.rarity]

@@ -23,6 +23,33 @@ local METEOR_SIZE = 5
 local world: any = nil
 local lastDig: { [Player]: number } = {}
 local lastLockedWarn: { [Player]: number } = {}
+-- 흙더미별로 누가 체력을 얼마나 깎았는지: [흙더미] = { [플레이어] = 깎은 체력 }
+local contributions: { [BasePart]: { [Player]: number } } = {}
+
+-- 흙더미가 부서졌을 때 판 사람 모두에게 판 만큼 보상 (2명 이상이면 보너스)
+local function rewardContributors(mound: BasePart, kindId: string, zoneId: string)
+	local list = contributions[mound] or {}
+	contributions[mound] = nil
+	local total = 0
+	local count = 0
+	for contributor, damage in list do
+		if contributor.Parent and DataService.Get(contributor) then
+			total += damage
+			count += 1
+		end
+	end
+	if total <= 0 then
+		return
+	end
+	local coop = count >= 2
+	local bonus = if coop then 1 + Config.CoopBonus else 1
+	for contributor, damage in list do
+		local data = contributor.Parent and DataService.Get(contributor)
+		if data then
+			Rewards.Dig(contributor, data, kindId, zoneId, mound.Position, { share = damage / total * bonus, coop = coop })
+		end
+	end
+end
 
 ----------------------------------------------------------------------
 -- 도구
@@ -256,6 +283,13 @@ local function onDig(player: Player, mound: any)
 	lastDig[player] = now
 
 	local tool = Config.ToolsById[data.tool] or Config.Tools[1]
+	local damage = math.min(tool.power, hp) -- 남은 체력보다 많이 친 건 기록하지 않음
+	local list = contributions[mound]
+	if not list then
+		list = {}
+		contributions[mound] = list
+	end
+	list[player] = (list[player] or 0) + damage
 	hp -= tool.power
 	mound:SetAttribute("HP", hp)
 	local kindId = mound:GetAttribute("Kind") :: string
@@ -267,7 +301,7 @@ local function onDig(player: Player, mound: any)
 	end
 
 	hideMound(mound)
-	Rewards.Dig(player, data, kindId, zoneId, mound.Position)
+	rewardContributors(mound, kindId, zoneId)
 	if kindId == "Meteor" then
 		task.delay(1, function()
 			mound:Destroy()
@@ -351,6 +385,7 @@ local function meteorLoop()
 		task.wait(Config.MeteorDuration)
 
 		for _, meteor in meteors do
+			contributions[meteor] = nil
 			if meteor.Parent then
 				meteor:Destroy()
 			end
@@ -398,6 +433,9 @@ function DigService.Init(builtWorld: any)
 	Players.PlayerRemoving:Connect(function(player)
 		lastDig[player] = nil
 		lastLockedWarn[player] = nil
+		for _, list in contributions do
+			list[player] = nil
+		end
 	end)
 
 	task.spawn(meteorLoop)
