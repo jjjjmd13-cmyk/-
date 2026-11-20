@@ -62,6 +62,8 @@ function Rewards.Dig(player: Player, data: any, kindId: string, zoneId: string, 
 		result.pieceIndex = pieceIndex
 		result.isNew = before == 0
 		result.complete = Economy.HasAllPieces(data, speciesId)
+		-- 뼈 튀어나오는 연출 (주변 사람들도 봄)
+		Net.Effect:FireAllClients("Bone", position, speciesId, pieceIndex, player.UserId, result.isNew)
 
 		local species = Config.SpeciesById[speciesId]
 		local rarity = Config.RarityById[species.rarity]

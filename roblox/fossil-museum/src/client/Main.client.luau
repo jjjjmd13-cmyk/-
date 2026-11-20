@@ -15,6 +15,7 @@ local Digger = require(Client.Digger)
 local Effects = require(Client.Effects)
 local Barriers = require(Client.Barriers)
 local HelperVisuals = require(Client.HelperVisuals)
+local BonePop = require(Client.BonePop)
 
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -230,8 +231,12 @@ notifyRemote.OnClientEvent:Connect(function(payload: any)
 	end
 end)
 
-effectRemote.OnClientEvent:Connect(function(kind: string, position: Vector3, color: Color3, big: boolean)
-	if kind == "Dig" then
+effectRemote.OnClientEvent:Connect(function(kind: string, position: Vector3, ...: any)
+	if kind == "Bone" then
+		local speciesId, pieceIndex, ownerId, isNew = ...
+		BonePop.Play(position, speciesId, pieceIndex, ownerId, isNew == true)
+	elseif kind == "Dig" then
+		local color, big = ...
 		Effects.DirtBurst(position, color, big)
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
