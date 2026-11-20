@@ -82,17 +82,17 @@ Config.Zones = {
 		moundColor = Color3.fromRGB(125, 88, 58), moundMaterial = Enum.Material.Ground, barrierColor = Color3.fromRGB(255, 200, 120),
 	},
 	{
-		id = "Glacier", name = "빙하 지대", emoji = "🧊", price = 40000, incomeMult = 6, coinMult = 5, hpMult = 2.5, angle = 22.5,
+		id = "Glacier", name = "빙하 지대", emoji = "🧊", price = 40000, incomeMult = 6, coinMult = 5, hpMult = 2.5, angle = 15,
 		groundColor = Color3.fromRGB(225, 240, 250), groundMaterial = Enum.Material.Snow,
 		moundColor = Color3.fromRGB(170, 205, 230), moundMaterial = Enum.Material.Glacier, barrierColor = Color3.fromRGB(140, 220, 255),
 	},
 	{
-		id = "Volcano", name = "화산 지대", emoji = "🌋", price = 1500000, incomeMult = 40, coinMult = 30, hpMult = 6, angle = 157.5,
+		id = "Volcano", name = "화산 지대", emoji = "🌋", price = 1500000, incomeMult = 40, coinMult = 30, hpMult = 6, angle = 135,
 		groundColor = Color3.fromRGB(55, 45, 45), groundMaterial = Enum.Material.Basalt,
 		moundColor = Color3.fromRGB(110, 45, 35), moundMaterial = Enum.Material.CrackedLava, barrierColor = Color3.fromRGB(255, 110, 40),
 	},
 	{
-		id = "Coast", name = "해안 절벽", emoji = "🌊", price = 60000000, incomeMult = 250, coinMult = 180, hpMult = 15, angle = 292.5,
+		id = "Coast", name = "해안 절벽", emoji = "🌊", price = 60000000, incomeMult = 250, coinMult = 180, hpMult = 15, angle = 225,
 		groundColor = Color3.fromRGB(240, 225, 180), groundMaterial = Enum.Material.Sand,
 		moundColor = Color3.fromRGB(160, 150, 130), moundMaterial = Enum.Material.Limestone, barrierColor = Color3.fromRGB(60, 170, 255),
 	},
@@ -323,8 +323,15 @@ Config.SlotStep = 2
 -- 다음 전시대 확장 가격 (4→6, 6→8, ...)
 Config.SlotPrices = { 400, 3000, 15000, 60000, 250000, 1000000 }
 
-Config.LikeBonus = 0.01 -- 좋아요 1개당 수입 +1%
-Config.MaxLikeBonus = 1.0 -- 최대 +100%
+Config.PlotCount = 12 -- 박물관 부지 수 = 서버 최대 인원
+Config.LikeBonus = 0.01 -- 좋아요 1개당 수입 +1% (LikeSoftCap 개까지)
+Config.LikeSoftCap = 100
+Config.LikeBonusAfterCap = 0.002 -- 그 뒤로는 1개당 +0.2% (한도 없음)
+Config.NpcLikeWeight = 0.2 -- NPC 손님 좋아요 1개 = 사람 좋아요 0.2개 (랭킹에는 안 들어감)
+Config.NpcLikeInterval = 30 -- 몇 초마다 NPC 손님이 좋아요를 남길지 확인
+Config.NpcLikeAppealDivisor = 60 -- 확률 = 매력도 / 이 값 (최대 80%)
+Config.LikerRewardSeconds = 60 -- 좋아요를 누른 사람 보상 = 내 초당 수입 × 60초
+Config.LikerRewardMin = 200
 Config.UniqueBonus = 0.03 -- 서로 다른 화석 1종 완성당 수입 +3%
 Config.ZoneCompleteBonus = 0.25 -- 한 지역의 화석을 모두 완성하면 수입 +25%
 
@@ -525,6 +532,26 @@ function Economy.GetZoneProgress(data: any): { [string]: { done: number, total: 
 	return result
 end
 
+-- 좋아요 보너스: 사람 좋아요 + NPC 좋아요(가중치). 100개까지 1%씩, 그 뒤로 0.2%씩
+function Economy.GetEffectiveLikes(data: any): number
+	return data.likes + (data.npcLikes or 0) * Config.NpcLikeWeight
+end
+
+function Economy.GetLikeBonus(data: any): number
+	local likes = Economy.GetEffectiveLikes(data)
+	local first = math.min(likes, Config.LikeSoftCap)
+	return first * Config.LikeBonus + math.max(0, likes - Config.LikeSoftCap) * Config.LikeBonusAfterCap
+end
+
+-- 박물관 매력도: 전시 중인 화석 등급의 합 (NPC 손님 수와 좋아요 확률에 쓰임)
+function Economy.GetAppeal(data: any): number
+	local appeal = 0
+	for _, speciesId in Economy.GetDisplayed(data) do
+		appeal += Config.RarityById[Config.SpeciesById[speciesId].rarity].tier
+	end
+	return appeal
+end
+
 function Economy.GetIncomeMultiplier(data: any, passes: Passes): number
 	local unique = 0
 	for speciesId, count in data.museum do
@@ -539,7 +566,7 @@ function Economy.GetIncomeMultiplier(data: any, passes: Passes): number
 		end
 	end
 	local mult = 1
-	mult += math.min(data.likes * Config.LikeBonus, Config.MaxLikeBonus)
+	mult += Economy.GetLikeBonus(data)
 	mult += unique * Config.UniqueBonus
 	mult += zonesDone * Config.ZoneCompleteBonus
 	mult += (data.rebirths or 0) * Config.Rebirth.incomeBonus
@@ -689,7 +716,8 @@ local TEMPLATE = {
 	pieces = {}, -- [speciesId] = { ["1"] = 개수, ["2"] = 개수, ... }
 	museum = {}, -- [speciesId] = 완성한 개수
 	slots = Config.StartSlots,
-	likes = 0,
+	likes = 0, -- 사람에게 받은 좋아요
+	npcLikes = 0, -- NPC 손님에게 받은 좋아요
 	likedGiven = {}, -- [대상 UserId] = 좋아요 누른 날짜 번호
 	luckBoostUntil = 0,
 	lastOnline = 0,
@@ -1905,10 +1933,14 @@ end
 local function updateSign(plot: Model, player: Player?, data: any?)
 	if player and data then
 		setText(plot:FindFirstChild("Sign"), "Title", player.DisplayName .. "의 박물관")
-		setText(plot:FindFirstChild("LikeStand"), "Likes", "❤️\n" .. Util.FormatNumber(data.likes))
+		setText(plot:FindFirstChild("LikeStand"), "Likes", "❤️ " .. Util.FormatNumber(data.likes) .. "\n🧑 " .. Util.FormatNumber(data.npcLikes))
+		plot:SetAttribute("Appeal", Economy.GetAppeal(data))
+		plot:SetAttribute("Displayed", math.min(#Economy.GetDisplayed(data), data.slots))
 	else
 		setText(plot:FindFirstChild("Sign"), "Title", "빈 박물관")
 		setText(plot:FindFirstChild("LikeStand"), "Likes", "❤️")
+		plot:SetAttribute("Appeal", 0)
+		plot:SetAttribute("Displayed", 0)
 	end
 end
 
@@ -1970,7 +2002,7 @@ local function assignPlot(player: Player)
 			return
 		end
 	end
-	Net.Tell(player, "빈 박물관 부지가 없어요. 서버 최대 인원을 8명으로 설정해 주세요.")
+	Net.Tell(player, "빈 박물관 부지가 없어요. 서버 최대 인원을 " .. Config.PlotCount .. "명으로 설정해 주세요.")
 end
 
 local function releasePlot(player: Player)
@@ -2050,8 +2082,14 @@ local function onLike(liker: Player, plot: Model)
 	end
 	ownerData.weekLikes.count += 1
 	QuestService.Progress(liker, "Like")
-	Net.Tell(liker, owner.DisplayName .. "님의 박물관에 좋아요를 눌렀어요 ❤️", Color3.fromRGB(255, 130, 160))
-	Net.Tell(owner, liker.DisplayName .. "님이 내 박물관에 좋아요를 눌렀어요! ❤️ (수입 +1%)", Color3.fromRGB(255, 130, 160))
+	-- 좋아요를 누른 사람도 보상
+	local likerIncome = Economy.GetIncome(likerData, Passes.Get(liker))
+	local reward = math.max(Config.LikerRewardMin, math.floor(likerIncome * Config.LikerRewardSeconds))
+	likerData.coins += reward
+	likerData.stats.totalEarned += reward
+	Net.MarkDirty(liker)
+	Net.Tell(liker, string.format("%s님의 박물관에 좋아요를 눌렀어요 ❤️ 💰 +%s", owner.DisplayName, Util.FormatNumber(reward)), Color3.fromRGB(255, 130, 160))
+	Net.Tell(owner, liker.DisplayName .. "님이 내 박물관에 좋아요를 눌렀어요! ❤️ (수입 보너스 증가)", Color3.fromRGB(255, 130, 160))
 	Net.MarkDirty(owner)
 end
 
@@ -2176,6 +2214,25 @@ function MuseumService.Init(builtWorld: any)
 
 	Players.PlayerRemoving:Connect(releasePlot)
 
+	-- NPC 손님 좋아요: 전시가 화려할수록 자주
+	task.spawn(function()
+		while true do
+			task.wait(Config.NpcLikeInterval)
+			for player, plot in playerPlot do
+				local data = DataService.Get(player)
+				if data then
+					local appeal = Economy.GetAppeal(data)
+					if appeal > 0 and math.random() < math.min(0.8, appeal / Config.NpcLikeAppealDivisor) then
+						data.npcLikes += 1
+						updateSign(plot, player, data)
+						Net.Effect:FireAllClients("NpcLike", plot:GetAttribute("Index"))
+						Net.MarkDirty(player)
+					end
+				end
+			end
+		end
+	end)
+
 	-- 박물관 수입 (1초마다)
 	task.spawn(function()
 		while true do
@@ -2284,6 +2341,7 @@ function Net.Snapshot(player: Player): any?
 		museum = data.museum,
 		slots = data.slots,
 		likes = data.likes,
+		npcLikes = data.npcLikes,
 		luckBoostUntil = data.luckBoostUntil,
 		stats = data.stats,
 		unlockedZones = data.unlockedZones,
@@ -3205,7 +3263,7 @@ export type World = {
 	boards: { [string]: BasePart },
 }
 
-local PLOT_COUNT = 8
+local PLOT_COUNT = Config.PlotCount
 local PLOT_RADIUS = 150
 local PLOT_SIZE = 48
 local ZONE_RADIUS = 330
@@ -3631,7 +3689,7 @@ function Zones.IsUnlocked(data: any, zoneId: string): boolean
 end
 
 return Zones
-]]></string></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX0000002B"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX0000002A"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="Folder" referent="RBX00000029"><Properties><string name="Name">Client</string></Properties><Item class="ModuleScript" referent="RBX00000017"><Properties><string name="Name">Barriers</string><string name="Source"><![CDATA[-- 잠긴 지역의 벽: 내 화면에서만 단단하게 (열린 지역은 투명해지고 통과 가능)
+]]></string></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX0000002C"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX0000002B"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="Folder" referent="RBX0000002A"><Properties><string name="Name">Client</string></Properties><Item class="ModuleScript" referent="RBX00000017"><Properties><string name="Name">Barriers</string><string name="Source"><![CDATA[-- 잠긴 지역의 벽: 내 화면에서만 단단하게 (열린 지역은 투명해지고 통과 가능)
 -- 캐릭터 물리는 내 컴퓨터가 계산하므로, 여기서 CanCollide 를 바꾸면 나에게만 적용돼요.
 local Barriers = {}
 
@@ -4874,6 +4932,7 @@ local Effects = require(Client.Effects)
 local Barriers = require(Client.Barriers)
 local HelperVisuals = require(Client.HelperVisuals)
 local BonePop = require(Client.BonePop)
+local Visitors = require(Client.Visitors)
 
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -5012,6 +5071,7 @@ Hud.Create(function(id: string)
 end)
 PanelManager.Create(Hud.GetScreen(), request, invoke, refreshSnapshot)
 HelperVisuals.Init()
+Visitors.Init()
 
 Digger.Init(function()
 	return if snapshot then snapshot.cooldown else 0.55
@@ -5090,7 +5150,9 @@ notifyRemote.OnClientEvent:Connect(function(payload: any)
 end)
 
 effectRemote.OnClientEvent:Connect(function(kind: string, position: Vector3, ...: any)
-	if kind == "Bone" then
+	if kind == "NpcLike" then
+		Visitors.Heart(position :: any)
+	elseif kind == "Bone" then
 		local speciesId, pieceIndex, ownerId, isNew = ...
 		BonePop.Play(position, speciesId, pieceIndex, ownerId, isNew == true)
 	elseif kind == "Dig" then
@@ -5465,7 +5527,254 @@ function PanelManager.SetTrade(state: any)
 end
 
 return PanelManager
-]]></string></Properties></Item><Item class="Folder" referent="RBX00000028"><Properties><string name="Name">Panels</string></Properties><Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">Collection</string><string name="Source"><![CDATA[-- 📖 화석 도감: 지역별 탭, 조각 현황, 조립, 중복 판매
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">Visitors</string><string name="Source"><![CDATA[-- 🧑 NPC 관람객: 박물관마다 손님들이 돌아다니며 화석을 구경 (내 화면에서만 그림, 서버 부담 없음)
+-- 손님 수는 박물관 매력도(전시한 화석 등급의 합)에 따라 늘어나요.
+-- 실제 좋아요 판정은 서버가 하고, 여기서는 하트 연출만 보여줘요.
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local Visitors = {}
+
+local folder = Instance.new("Folder")
+folder.Name = "Visitors"
+folder.Parent = workspace
+
+local MAX_PER_PLOT = 6
+local WALK_SPEED = 4
+local VIEW_DISTANCE = 220 -- 이보다 먼 박물관의 손님은 움직이지 않음
+
+-- 전시대 위치 (WorldBuilder.PedestalOffsets 와 같은 배치, 앞쪽 = -Z)
+local PEDESTALS = {}
+for _, z in { -13, -3, 7, 17 } do
+	for _, x in { -15, -5, 5, 15 } do
+		table.insert(PEDESTALS, Vector3.new(x, 0, z))
+	end
+end
+
+local SHIRTS = {
+	Color3.fromRGB(220, 80, 80),
+	Color3.fromRGB(80, 140, 220),
+	Color3.fromRGB(90, 180, 100),
+	Color3.fromRGB(230, 190, 70),
+	Color3.fromRGB(160, 100, 200),
+	Color3.fromRGB(240, 140, 60),
+	Color3.fromRGB(70, 190, 190),
+}
+local SKINS = {
+	Color3.fromRGB(255, 220, 180),
+	Color3.fromRGB(230, 185, 140),
+	Color3.fromRGB(190, 140, 100),
+	Color3.fromRGB(130, 90, 60),
+}
+
+type Visitor = {
+	model: Model,
+	pos: Vector3, -- 박물관 기준 로컬 위치
+	target: Vector3,
+	waitUntil: number,
+	phase: number,
+}
+type PlotState = { plot: Model, visitors: { Visitor } }
+local states: { [Model]: PlotState } = {}
+
+local function newPart(model: Model, size: Vector3, color: Color3, cf: CFrame, shape: Enum.PartType?): Part
+	local p = Instance.new("Part")
+	if shape then
+		p.Shape = shape
+	end
+	p.Size = size
+	p.CFrame = cf
+	p.Color = color
+	p.Material = Enum.Material.SmoothPlastic
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.Parent = model
+	return p
+end
+
+-- 발 아래가 원점인 단순한 사람 모형
+local function buildVisitor(): Model
+	local model = Instance.new("Model")
+	model.Name = "Visitor"
+	local shirt = SHIRTS[math.random(1, #SHIRTS)]
+	local skin = SKINS[math.random(1, #SKINS)]
+	local pants = Color3.fromRGB(math.random(40, 90), math.random(40, 90), math.random(60, 120))
+	local root = newPart(model, Vector3.new(0.2, 0.2, 0.2), skin, CFrame.identity)
+	root.Name = "Root"
+	root.Transparency = 1
+	model.PrimaryPart = root
+	newPart(model, Vector3.new(0.55, 1.6, 0.6), pants, CFrame.new(-0.32, 0.8, 0)).Name = "LegL"
+	newPart(model, Vector3.new(0.55, 1.6, 0.6), pants, CFrame.new(0.32, 0.8, 0)).Name = "LegR"
+	newPart(model, Vector3.new(1.3, 1.5, 0.7), shirt, CFrame.new(0, 2.35, 0))
+	newPart(model, Vector3.new(0.35, 1.3, 0.4), shirt, CFrame.new(-0.85, 2.4, 0))
+	newPart(model, Vector3.new(0.35, 1.3, 0.4), shirt, CFrame.new(0.85, 2.4, 0))
+	newPart(model, Vector3.new(0.9, 0.9, 0.9), skin, CFrame.new(0, 3.55, 0), Enum.PartType.Ball)
+	-- 가끔 모자
+	if math.random() < 0.4 then
+		newPart(model, Vector3.new(1, 0.25, 1), shirt:Lerp(Color3.new(0, 0, 0), 0.4), CFrame.new(0, 4.0, 0))
+	end
+	model.Parent = folder
+	return model
+end
+
+local function randomTarget(displayed: number): Vector3
+	if displayed > 0 and math.random() < 0.8 then
+		-- 전시된 화석 앞에 서서 구경
+		local ped = PEDESTALS[math.random(1, math.min(displayed, #PEDESTALS))]
+		return ped + Vector3.new(math.random(-20, 20) / 10, 0, -4.2)
+	end
+	return Vector3.new(math.random(-18, 18), 0, math.random(-20, 0))
+end
+
+local function syncCount(state: PlotState)
+	local plot = state.plot
+	local owner = plot:GetAttribute("OwnerUserId")
+	local appeal = plot:GetAttribute("Appeal") or 0
+	local want = 0
+	if owner and owner ~= 0 and appeal > 0 then
+		want = math.clamp(1 + appeal // 6, 1, MAX_PER_PLOT)
+	end
+	while #state.visitors > want do
+		table.remove(state.visitors).model:Destroy()
+	end
+	local displayed = plot:GetAttribute("Displayed") or 0
+	while #state.visitors < want do
+		-- 입구에서 들어옴
+		local start = Vector3.new(math.random(-6, 6), 0, -22)
+		table.insert(state.visitors, {
+			model = buildVisitor(),
+			pos = start,
+			target = randomTarget(displayed),
+			waitUntil = 0,
+			phase = math.random() * 10,
+		})
+	end
+end
+
+local function watchPlot(plot: Model)
+	if states[plot] then
+		return
+	end
+	local state = { plot = plot, visitors = {} }
+	states[plot] = state
+	for _, attr in { "OwnerUserId", "Appeal", "Displayed" } do
+		plot:GetAttributeChangedSignal(attr):Connect(function()
+			syncCount(state)
+		end)
+	end
+	syncCount(state)
+end
+
+-- 서버가 NPC 좋아요를 줬을 때 하트 연출
+function Visitors.Heart(plotIndex: number)
+	for plot, state in states do
+		if plot:GetAttribute("Index") == plotIndex then
+			local floor = plot:FindFirstChild("Floor") :: BasePart?
+			local visitor = state.visitors[math.random(1, math.max(1, #state.visitors))]
+			local position
+			if visitor then
+				position = visitor.model:GetPivot().Position + Vector3.new(0, 5, 0)
+			elseif floor then
+				position = floor.Position + Vector3.new(0, 6, 0)
+			else
+				return
+			end
+			local anchor = Instance.new("Part")
+			anchor.Anchored = true
+			anchor.CanCollide = false
+			anchor.CanQuery = false
+			anchor.CanTouch = false
+			anchor.Transparency = 1
+			anchor.Size = Vector3.one * 0.2
+			anchor.Position = position
+			anchor.Parent = folder
+			local gui = Instance.new("BillboardGui")
+			gui.Size = UDim2.fromOffset(60, 60)
+			gui.MaxDistance = 150
+			gui.Parent = anchor
+			local label = Instance.new("TextLabel")
+			label.Size = UDim2.fromScale(1, 1)
+			label.BackgroundTransparency = 1
+			label.TextScaled = true
+			label.Text = "❤️"
+			label.Parent = gui
+			local info = TweenInfo.new(1.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+			TweenService:Create(anchor, info, { Position = position + Vector3.new(0, 5, 0) }):Play()
+			TweenService:Create(label, info, { TextTransparency = 1 }):Play()
+			task.delay(1.7, function()
+				anchor:Destroy()
+			end)
+			return
+		end
+	end
+end
+
+function Visitors.Init()
+	task.spawn(function()
+		local root = workspace:WaitForChild("FossilWorld")
+		for _, child in root:GetChildren() do
+			if child:IsA("Model") and child:GetAttribute("OwnerUserId") ~= nil then
+				watchPlot(child)
+			end
+		end
+		root.ChildAdded:Connect(function(child)
+			if child:IsA("Model") and child:GetAttribute("OwnerUserId") ~= nil then
+				watchPlot(child)
+			end
+		end)
+	end)
+
+	RunService.Heartbeat:Connect(function(dt)
+		local camera = workspace.CurrentCamera
+		local camPos = if camera then camera.CFrame.Position else Vector3.zero
+		local now = os.clock()
+		for plot, state in states do
+			local floor = plot:FindFirstChild("Floor") :: BasePart?
+			if floor and #state.visitors > 0 then
+				local base = floor.CFrame * CFrame.new(0, floor.Size.Y / 2, 0)
+				local near = (base.Position - camPos).Magnitude < VIEW_DISTANCE
+				local displayed = plot:GetAttribute("Displayed") or 0
+				for _, v in state.visitors do
+					local walking = false
+					if near then
+						local toTarget = v.target - v.pos
+						if now < v.waitUntil then
+							walking = false
+						elseif toTarget.Magnitude < 0.2 then
+							v.waitUntil = now + 2 + math.random() * 4 -- 화석 앞에서 잠깐 구경
+							v.target = randomTarget(displayed)
+						else
+							walking = true
+							v.pos += toTarget.Unit * math.min(toTarget.Magnitude, WALK_SPEED * dt)
+						end
+					end
+					-- 바라보는 방향: 걸을 때는 가는 쪽, 서 있을 때는 전시대 쪽(+Z)
+					local face = if walking then (v.target - v.pos) else Vector3.new(0, 0, 1)
+					if face.Magnitude < 0.01 then
+						face = Vector3.new(0, 0, 1)
+					end
+					local localCf = CFrame.lookAt(v.pos, v.pos + Vector3.new(face.X, 0, face.Z))
+					local bob = if walking then math.abs(math.sin(now * 8 + v.phase)) * 0.15 else 0
+					v.model:PivotTo(base * localCf * CFrame.new(0, bob, 0))
+					-- 다리 흔들기
+					local swing = if walking then math.sin(now * 8 + v.phase) * 0.5 else 0
+					local legL = v.model:FindFirstChild("LegL") :: BasePart?
+					local legR = v.model:FindFirstChild("LegR") :: BasePart?
+					local pivot = v.model:GetPivot()
+					if legL and legR then
+						legL.CFrame = pivot * CFrame.new(-0.32, 1.6, 0) * CFrame.Angles(swing, 0, 0) * CFrame.new(0, -0.8, 0)
+						legR.CFrame = pivot * CFrame.new(0.32, 1.6, 0) * CFrame.Angles(-swing, 0, 0) * CFrame.new(0, -0.8, 0)
+					end
+				end
+			end
+		end
+	end)
+end
+
+return Visitors
+]]></string></Properties></Item><Item class="Folder" referent="RBX00000029"><Properties><string name="Name">Panels</string></Properties><Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">Collection</string><string name="Source"><![CDATA[-- 📖 화석 도감: 지역별 탭, 조각 현황, 조립, 중복 판매
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -5502,13 +5811,14 @@ function Collection.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 		done += entry.done
 	end
 	panel.subtitle.Text = string.format(
-		"완성 %d/%d종 · 전시 %d/%d칸 · 수입 배수 x%.2f · ❤️ %s",
+		"완성 %d/%d종 · 전시 %d/%d칸 · 수입 배수 x%.2f · ❤️ %s · 🧑 %s",
 		done,
 		total,
 		#Economy.GetDisplayed(snapshot),
 		snapshot.slots,
 		Economy.GetIncomeMultiplier(snapshot, snapshot.passes),
-		Util.FormatNumber(snapshot.likes)
+		Util.FormatNumber(snapshot.likes),
+		Util.FormatNumber(snapshot.npcLikes or 0)
 	)
 
 	local order = 1
@@ -5643,7 +5953,7 @@ function Collection.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 end
 
 return Collection
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">Helpers</string><string name="Source"><![CDATA[-- 🦖 발굴 조수: 고용, 데리고 다니기
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">Helpers</string><string name="Source"><![CDATA[-- 🦖 발굴 조수: 고용, 데리고 다니기
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -5710,7 +6020,7 @@ function Helpers.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 end
 
 return Helpers
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">Quests</string><string name="Source"><![CDATA[-- 📜 퀘스트 + 🎁 매일 보상
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">Quests</string><string name="Source"><![CDATA[-- 📜 퀘스트 + 🎁 매일 보상
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -5819,7 +6129,7 @@ function Quests.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 end
 
 return Quests
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">Rebirth</string><string name="Source"><![CDATA[-- 🔁 환생
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">Rebirth</string><string name="Source"><![CDATA[-- 🔁 환생
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -5884,7 +6194,7 @@ function Rebirth.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 end
 
 return Rebirth
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">Shop</string><string name="Source"><![CDATA[-- 🛒 상점: 도구, 전시대, Robux
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">Shop</string><string name="Source"><![CDATA[-- 🛒 상점: 도구, 전시대, Robux
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -5973,7 +6283,7 @@ local function renderMuseum(panel: PanelKit.Panel, snapshot: any, ctx: any)
 		end
 	end
 	local lines = {
-		string.format("❤️ 좋아요 %d개 → +%d%% (최대 +100%%)", snapshot.likes, math.floor(math.min(snapshot.likes * Config.LikeBonus, Config.MaxLikeBonus) * 100)),
+		string.format("❤️ 좋아요 %d개 + 🧑 손님 좋아요 %d개 → +%d%% (100개 넘으면 천천히, 한도 없음)", snapshot.likes, snapshot.npcLikes or 0, math.floor(Economy.GetLikeBonus(snapshot) * 100)),
 		string.format("🦴 완성한 화석 %d종 → +%d%%", unique, math.floor(unique * Config.UniqueBonus * 100)),
 		string.format("🗺️ 완성한 지역 %d곳 → +%d%%", zonesDone, math.floor(zonesDone * Config.ZoneCompleteBonus * 100)),
 		string.format("🔁 환생 %d회 → +%d%%", snapshot.rebirths, math.floor(snapshot.rebirths * Config.Rebirth.incomeBonus * 100)),
@@ -6047,7 +6357,7 @@ function Shop.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 end
 
 return Shop
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">Trade</string><string name="Source"><![CDATA[-- 🤝 거래: 플레이어 목록 → 요청 → 서로 조각/코인 올리기 → 둘 다 준비하면 교환
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">Trade</string><string name="Source"><![CDATA[-- 🤝 거래: 플레이어 목록 → 요청 → 서로 조각/코인 올리기 → 둘 다 준비하면 교환
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -6210,7 +6520,7 @@ function Trade.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 end
 
 return Trade
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">Zones</string><string name="Source"><![CDATA[-- 🗺️ 발굴 지역: 열기, 이동
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">Zones</string><string name="Source"><![CDATA[-- 🗺️ 발굴 지역: 열기, 이동
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)

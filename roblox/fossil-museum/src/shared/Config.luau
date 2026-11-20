@@ -82,17 +82,17 @@ Config.Zones = {
 		moundColor = Color3.fromRGB(125, 88, 58), moundMaterial = Enum.Material.Ground, barrierColor = Color3.fromRGB(255, 200, 120),
 	},
 	{
-		id = "Glacier", name = "빙하 지대", emoji = "🧊", price = 40000, incomeMult = 6, coinMult = 5, hpMult = 2.5, angle = 22.5,
+		id = "Glacier", name = "빙하 지대", emoji = "🧊", price = 40000, incomeMult = 6, coinMult = 5, hpMult = 2.5, angle = 15,
 		groundColor = Color3.fromRGB(225, 240, 250), groundMaterial = Enum.Material.Snow,
 		moundColor = Color3.fromRGB(170, 205, 230), moundMaterial = Enum.Material.Glacier, barrierColor = Color3.fromRGB(140, 220, 255),
 	},
 	{
-		id = "Volcano", name = "화산 지대", emoji = "🌋", price = 1500000, incomeMult = 40, coinMult = 30, hpMult = 6, angle = 157.5,
+		id = "Volcano", name = "화산 지대", emoji = "🌋", price = 1500000, incomeMult = 40, coinMult = 30, hpMult = 6, angle = 135,
 		groundColor = Color3.fromRGB(55, 45, 45), groundMaterial = Enum.Material.Basalt,
 		moundColor = Color3.fromRGB(110, 45, 35), moundMaterial = Enum.Material.CrackedLava, barrierColor = Color3.fromRGB(255, 110, 40),
 	},
 	{
-		id = "Coast", name = "해안 절벽", emoji = "🌊", price = 60000000, incomeMult = 250, coinMult = 180, hpMult = 15, angle = 292.5,
+		id = "Coast", name = "해안 절벽", emoji = "🌊", price = 60000000, incomeMult = 250, coinMult = 180, hpMult = 15, angle = 225,
 		groundColor = Color3.fromRGB(240, 225, 180), groundMaterial = Enum.Material.Sand,
 		moundColor = Color3.fromRGB(160, 150, 130), moundMaterial = Enum.Material.Limestone, barrierColor = Color3.fromRGB(60, 170, 255),
 	},
@@ -323,8 +323,15 @@ Config.SlotStep = 2
 -- 다음 전시대 확장 가격 (4→6, 6→8, ...)
 Config.SlotPrices = { 400, 3000, 15000, 60000, 250000, 1000000 }
 
-Config.LikeBonus = 0.01 -- 좋아요 1개당 수입 +1%
-Config.MaxLikeBonus = 1.0 -- 최대 +100%
+Config.PlotCount = 12 -- 박물관 부지 수 = 서버 최대 인원
+Config.LikeBonus = 0.01 -- 좋아요 1개당 수입 +1% (LikeSoftCap 개까지)
+Config.LikeSoftCap = 100
+Config.LikeBonusAfterCap = 0.002 -- 그 뒤로는 1개당 +0.2% (한도 없음)
+Config.NpcLikeWeight = 0.2 -- NPC 손님 좋아요 1개 = 사람 좋아요 0.2개 (랭킹에는 안 들어감)
+Config.NpcLikeInterval = 30 -- 몇 초마다 NPC 손님이 좋아요를 남길지 확인
+Config.NpcLikeAppealDivisor = 60 -- 확률 = 매력도 / 이 값 (최대 80%)
+Config.LikerRewardSeconds = 60 -- 좋아요를 누른 사람 보상 = 내 초당 수입 × 60초
+Config.LikerRewardMin = 200
 Config.UniqueBonus = 0.03 -- 서로 다른 화석 1종 완성당 수입 +3%
 Config.ZoneCompleteBonus = 0.25 -- 한 지역의 화석을 모두 완성하면 수입 +25%
 

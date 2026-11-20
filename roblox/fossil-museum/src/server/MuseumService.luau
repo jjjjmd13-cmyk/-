@@ -39,10 +39,14 @@ end
 local function updateSign(plot: Model, player: Player?, data: any?)
 	if player and data then
 		setText(plot:FindFirstChild("Sign"), "Title", player.DisplayName .. "의 박물관")
-		setText(plot:FindFirstChild("LikeStand"), "Likes", "❤️\n" .. Util.FormatNumber(data.likes))
+		setText(plot:FindFirstChild("LikeStand"), "Likes", "❤️ " .. Util.FormatNumber(data.likes) .. "\n🧑 " .. Util.FormatNumber(data.npcLikes))
+		plot:SetAttribute("Appeal", Economy.GetAppeal(data))
+		plot:SetAttribute("Displayed", math.min(#Economy.GetDisplayed(data), data.slots))
 	else
 		setText(plot:FindFirstChild("Sign"), "Title", "빈 박물관")
 		setText(plot:FindFirstChild("LikeStand"), "Likes", "❤️")
+		plot:SetAttribute("Appeal", 0)
+		plot:SetAttribute("Displayed", 0)
 	end
 end
 
@@ -104,7 +108,7 @@ local function assignPlot(player: Player)
 			return
 		end
 	end
-	Net.Tell(player, "빈 박물관 부지가 없어요. 서버 최대 인원을 8명으로 설정해 주세요.")
+	Net.Tell(player, "빈 박물관 부지가 없어요. 서버 최대 인원을 " .. Config.PlotCount .. "명으로 설정해 주세요.")
 end
 
 local function releasePlot(player: Player)
@@ -184,8 +188,14 @@ local function onLike(liker: Player, plot: Model)
 	end
 	ownerData.weekLikes.count += 1
 	QuestService.Progress(liker, "Like")
-	Net.Tell(liker, owner.DisplayName .. "님의 박물관에 좋아요를 눌렀어요 ❤️", Color3.fromRGB(255, 130, 160))
-	Net.Tell(owner, liker.DisplayName .. "님이 내 박물관에 좋아요를 눌렀어요! ❤️ (수입 +1%)", Color3.fromRGB(255, 130, 160))
+	-- 좋아요를 누른 사람도 보상
+	local likerIncome = Economy.GetIncome(likerData, Passes.Get(liker))
+	local reward = math.max(Config.LikerRewardMin, math.floor(likerIncome * Config.LikerRewardSeconds))
+	likerData.coins += reward
+	likerData.stats.totalEarned += reward
+	Net.MarkDirty(liker)
+	Net.Tell(liker, string.format("%s님의 박물관에 좋아요를 눌렀어요 ❤️ 💰 +%s", owner.DisplayName, Util.FormatNumber(reward)), Color3.fromRGB(255, 130, 160))
+	Net.Tell(owner, liker.DisplayName .. "님이 내 박물관에 좋아요를 눌렀어요! ❤️ (수입 보너스 증가)", Color3.fromRGB(255, 130, 160))
 	Net.MarkDirty(owner)
 end
 
@@ -309,6 +319,25 @@ function MuseumService.Init(builtWorld: any)
 	end)
 
 	Players.PlayerRemoving:Connect(releasePlot)
+
+	-- NPC 손님 좋아요: 전시가 화려할수록 자주
+	task.spawn(function()
+		while true do
+			task.wait(Config.NpcLikeInterval)
+			for player, plot in playerPlot do
+				local data = DataService.Get(player)
+				if data then
+					local appeal = Economy.GetAppeal(data)
+					if appeal > 0 and math.random() < math.min(0.8, appeal / Config.NpcLikeAppealDivisor) then
+						data.npcLikes += 1
+						updateSign(plot, player, data)
+						Net.Effect:FireAllClients("NpcLike", plot:GetAttribute("Index"))
+						Net.MarkDirty(player)
+					end
+				end
+			end
+		end
+	end)
 
 	-- 박물관 수입 (1초마다)
 	task.spawn(function()

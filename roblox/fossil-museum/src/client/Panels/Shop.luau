@@ -87,7 +87,7 @@ local function renderMuseum(panel: PanelKit.Panel, snapshot: any, ctx: any)
 		end
 	end
 	local lines = {
-		string.format("❤️ 좋아요 %d개 → +%d%% (최대 +100%%)", snapshot.likes, math.floor(math.min(snapshot.likes * Config.LikeBonus, Config.MaxLikeBonus) * 100)),
+		string.format("❤️ 좋아요 %d개 + 🧑 손님 좋아요 %d개 → +%d%% (100개 넘으면 천천히, 한도 없음)", snapshot.likes, snapshot.npcLikes or 0, math.floor(Economy.GetLikeBonus(snapshot) * 100)),
 		string.format("🦴 완성한 화석 %d종 → +%d%%", unique, math.floor(unique * Config.UniqueBonus * 100)),
 		string.format("🗺️ 완성한 지역 %d곳 → +%d%%", zonesDone, math.floor(zonesDone * Config.ZoneCompleteBonus * 100)),
 		string.format("🔁 환생 %d회 → +%d%%", snapshot.rebirths, math.floor(snapshot.rebirths * Config.Rebirth.incomeBonus * 100)),

@@ -19,7 +19,8 @@ local TEMPLATE = {
 	pieces = {}, -- [speciesId] = { ["1"] = 개수, ["2"] = 개수, ... }
 	museum = {}, -- [speciesId] = 완성한 개수
 	slots = Config.StartSlots,
-	likes = 0,
+	likes = 0, -- 사람에게 받은 좋아요
+	npcLikes = 0, -- NPC 손님에게 받은 좋아요
 	likedGiven = {}, -- [대상 UserId] = 좋아요 누른 날짜 번호
 	luckBoostUntil = 0,
 	lastOnline = 0,

@@ -25,7 +25,7 @@ export type World = {
 	boards: { [string]: BasePart },
 }
 
-local PLOT_COUNT = 8
+local PLOT_COUNT = Config.PlotCount
 local PLOT_RADIUS = 150
 local PLOT_SIZE = 48
 local ZONE_RADIUS = 330

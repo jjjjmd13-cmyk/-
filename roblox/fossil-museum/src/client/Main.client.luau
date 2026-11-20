@@ -16,6 +16,7 @@ local Effects = require(Client.Effects)
 local Barriers = require(Client.Barriers)
 local HelperVisuals = require(Client.HelperVisuals)
 local BonePop = require(Client.BonePop)
+local Visitors = require(Client.Visitors)
 
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -154,6 +155,7 @@ Hud.Create(function(id: string)
 end)
 PanelManager.Create(Hud.GetScreen(), request, invoke, refreshSnapshot)
 HelperVisuals.Init()
+Visitors.Init()
 
 Digger.Init(function()
 	return if snapshot then snapshot.cooldown else 0.55
@@ -232,7 +234,9 @@ notifyRemote.OnClientEvent:Connect(function(payload: any)
 end)
 
 effectRemote.OnClientEvent:Connect(function(kind: string, position: Vector3, ...: any)
-	if kind == "Bone" then
+	if kind == "NpcLike" then
+		Visitors.Heart(position :: any)
+	elseif kind == "Bone" then
 		local speciesId, pieceIndex, ownerId, isNew = ...
 		BonePop.Play(position, speciesId, pieceIndex, ownerId, isNew == true)
 	elseif kind == "Dig" then

@@ -35,13 +35,14 @@ function Collection.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 		done += entry.done
 	end
 	panel.subtitle.Text = string.format(
-		"완성 %d/%d종 · 전시 %d/%d칸 · 수입 배수 x%.2f · ❤️ %s",
+		"완성 %d/%d종 · 전시 %d/%d칸 · 수입 배수 x%.2f · ❤️ %s · 🧑 %s",
 		done,
 		total,
 		#Economy.GetDisplayed(snapshot),
 		snapshot.slots,
 		Economy.GetIncomeMultiplier(snapshot, snapshot.passes),
-		Util.FormatNumber(snapshot.likes)
+		Util.FormatNumber(snapshot.likes),
+		Util.FormatNumber(snapshot.npcLikes or 0)
 	)
 
 	local order = 1

@@ -135,6 +135,26 @@ function Economy.GetZoneProgress(data: any): { [string]: { done: number, total: 
 	return result
 end
 
+-- 좋아요 보너스: 사람 좋아요 + NPC 좋아요(가중치). 100개까지 1%씩, 그 뒤로 0.2%씩
+function Economy.GetEffectiveLikes(data: any): number
+	return data.likes + (data.npcLikes or 0) * Config.NpcLikeWeight
+end
+
+function Economy.GetLikeBonus(data: any): number
+	local likes = Economy.GetEffectiveLikes(data)
+	local first = math.min(likes, Config.LikeSoftCap)
+	return first * Config.LikeBonus + math.max(0, likes - Config.LikeSoftCap) * Config.LikeBonusAfterCap
+end
+
+-- 박물관 매력도: 전시 중인 화석 등급의 합 (NPC 손님 수와 좋아요 확률에 쓰임)
+function Economy.GetAppeal(data: any): number
+	local appeal = 0
+	for _, speciesId in Economy.GetDisplayed(data) do
+		appeal += Config.RarityById[Config.SpeciesById[speciesId].rarity].tier
+	end
+	return appeal
+end
+
 function Economy.GetIncomeMultiplier(data: any, passes: Passes): number
 	local unique = 0
 	for speciesId, count in data.museum do
@@ -149,7 +169,7 @@ function Economy.GetIncomeMultiplier(data: any, passes: Passes): number
 		end
 	end
 	local mult = 1
-	mult += math.min(data.likes * Config.LikeBonus, Config.MaxLikeBonus)
+	mult += Economy.GetLikeBonus(data)
 	mult += unique * Config.UniqueBonus
 	mult += zonesDone * Config.ZoneCompleteBonus
 	mult += (data.rebirths or 0) * Config.Rebirth.incomeBonus

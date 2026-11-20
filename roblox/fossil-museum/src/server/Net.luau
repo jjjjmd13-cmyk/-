@@ -83,6 +83,7 @@ function Net.Snapshot(player: Player): any?
 		museum = data.museum,
 		slots = data.slots,
 		likes = data.likes,
+		npcLikes = data.npcLikes,
 		luckBoostUntil = data.luckBoostUntil,
 		stats = data.stats,
 		unlockedZones = data.unlockedZones,
