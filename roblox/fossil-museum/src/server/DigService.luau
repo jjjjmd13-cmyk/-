@@ -1,4 +1,4 @@
--- 발굴: 흙더미 생성, 삽질 처리, 보상, 운석 이벤트, 도구 지급
+-- 발굴: 흙더미 생성, 삽질 처리, 운석 이벤트, 도구 지급
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -7,9 +7,12 @@ local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Economy = require(ReplicatedStorage.Shared.Economy)
+local Util = require(ReplicatedStorage.Shared.Util)
 local DataService = require(script.Parent.DataService)
 local Passes = require(script.Parent.Passes)
 local Net = require(script.Parent.Net)
+local Rewards = require(script.Parent.Rewards)
+local Zones = require(script.Parent.Zones)
 
 local DigService = {}
 
@@ -19,6 +22,7 @@ local METEOR_SIZE = 5
 
 local world: any = nil
 local lastDig: { [Player]: number } = {}
+local lastLockedWarn: { [Player]: number } = {}
 
 ----------------------------------------------------------------------
 -- 도구
@@ -44,7 +48,8 @@ local function buildTool(def: Config.DigTool): Tool
 	local head = Instance.new("Part")
 	head.Name = "Head"
 	head.Size = Vector3.new(1.3, 0.2, 1.4)
-	head.Material = if def.id == "LaserDrill" then Enum.Material.Neon else Enum.Material.Metal
+	local glowing = def.power >= 14
+	head.Material = if glowing then Enum.Material.Neon else Enum.Material.Metal
 	head.Color = def.color
 	head.CanCollide = false
 	head.Massless = true
@@ -54,6 +59,12 @@ local function buildTool(def: Config.DigTool): Tool
 	weld.Part0 = handle
 	weld.Part1 = head
 	weld.Parent = handle
+	if glowing then
+		local light = Instance.new("PointLight")
+		light.Color = def.color
+		light.Range = 6
+		light.Parent = head
+	end
 	return tool
 end
 
@@ -98,9 +109,11 @@ local function rollMoundKind(): string
 	end
 	local roll = math.random() * total
 	for id, kind in Config.Mounds do
-		roll -= kind.spawnWeight
-		if kind.spawnWeight > 0 and roll <= 0 then
-			return id
+		if kind.spawnWeight > 0 then
+			roll -= kind.spawnWeight
+			if roll <= 0 then
+				return id
+			end
 		end
 	end
 	return "Dirt"
@@ -124,13 +137,22 @@ local function addSparkle(mound: BasePart, color: Color3)
 	light.Parent = mound
 end
 
-local function setupMound(mound: Part, kindId: string)
+local function setupMound(mound: BasePart, kindId: string, zoneId: string)
 	local kind = Config.Mounds[kindId]
+	local zone = Config.ZoneById[zoneId] or Config.Zones[1]
+	local hp = math.ceil(kind.hp * zone.hpMult)
 	mound.Name = kindId
-	mound.Color = kind.color
+	if kindId == "Meteor" then
+		mound.Color = Color3.fromRGB(80, 40, 120)
+	elseif kindId == "Sparkle" then
+		mound.Color = zone.moundColor:Lerp(Color3.fromRGB(255, 210, 90), 0.35)
+	else
+		mound.Color = zone.moundColor
+	end
 	mound:SetAttribute("Kind", kindId)
-	mound:SetAttribute("HP", kind.hp)
-	mound:SetAttribute("MaxHP", kind.hp)
+	mound:SetAttribute("Zone", zone.id)
+	mound:SetAttribute("HP", hp)
+	mound:SetAttribute("MaxHP", hp)
 	for _, child in mound:GetChildren() do
 		if child:IsA("ParticleEmitter") or child:IsA("PointLight") then
 			child:Destroy()
@@ -141,19 +163,19 @@ local function setupMound(mound: Part, kindId: string)
 	end
 end
 
-local function makeMound(position: Vector3, kindId: string): Part
+local function makeMound(zoneWorld: any, position: Vector3, kindId: string): Part
+	local zone = Config.ZoneById[zoneWorld.id]
 	local mound = Instance.new("Part")
 	mound.Anchored = true
 	mound.Size = MOUND_SIZE
 	mound.CFrame = CFrame.new(position + Vector3.new(0, 0.3, 0)) * CFrame.Angles(0, math.random() * math.pi * 2, 0)
-	mound.Material = Enum.Material.Ground
+	mound.Material = zone.moundMaterial
 	mound.CanCollide = true
 	local mesh = Instance.new("SpecialMesh")
 	mesh.MeshType = Enum.MeshType.Sphere
 	mesh.Parent = mound
-	mound:SetAttribute("Spot", position)
-	setupMound(mound, kindId)
-	mound.Parent = world.field
+	setupMound(mound, kindId, zone.id)
+	mound.Parent = zoneWorld.field
 	CollectionService:AddTag(mound, TAG)
 	return mound
 end
@@ -162,8 +184,11 @@ local function updateMoundSize(mound: BasePart)
 	local hp = mound:GetAttribute("HP") :: number
 	local maxHp = mound:GetAttribute("MaxHP") :: number
 	local ratio = 0.35 + 0.65 * math.clamp(hp / maxHp, 0, 1)
-	local full = if mound:GetAttribute("Kind") == "Meteor" then Vector3.one * METEOR_SIZE else MOUND_SIZE
-	mound.Size = Vector3.new(full.X * (0.7 + 0.3 * ratio), full.Y * ratio, full.Z * (0.7 + 0.3 * ratio))
+	if mound:GetAttribute("Kind") == "Meteor" then
+		mound.Size = Vector3.one * METEOR_SIZE * (0.5 + 0.5 * ratio)
+	else
+		mound.Size = Vector3.new(MOUND_SIZE.X * (0.7 + 0.3 * ratio), MOUND_SIZE.Y * ratio, MOUND_SIZE.Z * (0.7 + 0.3 * ratio))
+	end
 end
 
 local function hideMound(mound: BasePart)
@@ -171,63 +196,19 @@ local function hideMound(mound: BasePart)
 	mound.CanCollide = false
 	mound.CanQuery = false
 	for _, child in mound:GetChildren() do
-		if child:IsA("ParticleEmitter") then
-			child.Enabled = false
-		elseif child:IsA("PointLight") then
-			child.Enabled = false
+		if child:IsA("ParticleEmitter") or child:IsA("PointLight") or child:IsA("Fire") then
+			(child :: any).Enabled = false
 		end
 	end
 end
 
 local function respawnMound(mound: Part)
-	setupMound(mound, rollMoundKind())
+	setupMound(mound, rollMoundKind(), mound:GetAttribute("Zone") :: string)
 	mound.Size = Vector3.new(MOUND_SIZE.X, 0.2, MOUND_SIZE.Z)
 	mound.Transparency = 0
 	mound.CanCollide = true
 	mound.CanQuery = true
 	TweenService:Create(mound, TweenInfo.new(0.6, Enum.EasingStyle.Back), { Size = MOUND_SIZE }):Play()
-end
-
-----------------------------------------------------------------------
--- 보상
-----------------------------------------------------------------------
-local function reward(player: Player, data: any, kind: Config.MoundKind, position: Vector3)
-	local passes = Passes.Get(player)
-	local tool = Config.ToolsById[data.tool] or Config.Tools[1]
-	local coins = math.floor(kind.coins * (1 + tool.power * 0.25))
-	data.coins += coins
-	data.stats.dug += 1
-
-	local result: { [string]: any } = { kind = "Dig", coins = coins, position = position }
-
-	if math.random() < kind.pieceChance then
-		local luck = Economy.GetLuck(data, passes, kind.luck)
-		local speciesId, pieceIndex = Economy.RollPiece(luck, kind.cosmicChance)
-		local owned = data.pieces[speciesId]
-		if not owned then
-			owned = {}
-			data.pieces[speciesId] = owned
-		end
-		local key = tostring(pieceIndex)
-		local before = owned[key] or 0
-		owned[key] = before + 1
-		data.stats.found += 1
-
-		result.speciesId = speciesId
-		result.pieceIndex = pieceIndex
-		result.isNew = before == 0
-		result.complete = Economy.HasAllPieces(data, speciesId)
-
-		local species = Config.SpeciesById[speciesId]
-		local rarity = Config.RarityById[species.rarity]
-		if rarity.tier >= Config.AnnounceTier then
-			local pieceName = Config.GetPieces(species)[pieceIndex]
-			Net.Announce(string.format("🦴 %s님이 [%s] %s %s 조각을 발견했어요!", player.DisplayName, rarity.name, species.name, pieceName), rarity.color)
-		end
-	end
-
-	Net.Notify:FireClient(player, result)
-	Net.MarkDirty(player)
 end
 
 ----------------------------------------------------------------------
@@ -249,7 +230,7 @@ local function onDig(player: Player, mound: any)
 
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not root then
+	if not root or not character then
 		return
 	end
 	if (root.Position - mound.Position).Magnitude > Config.DigRange then
@@ -257,6 +238,15 @@ local function onDig(player: Player, mound: any)
 	end
 	local held = character:FindFirstChildOfClass("Tool")
 	if not held or not held:GetAttribute("DigTool") then
+		return
+	end
+	local zoneId = mound:GetAttribute("Zone") :: string
+	if not Zones.IsUnlocked(data, zoneId) then
+		if now - (lastLockedWarn[player] or 0) > 3 then
+			lastLockedWarn[player] = now
+			local zone = Config.ZoneById[zoneId]
+			Net.Tell(player, string.format("🔒 %s은(는) 아직 잠겨 있어요 (💰 %s)", zone.name, Util.FormatNumber(zone.price)), Color3.fromRGB(255, 150, 150))
+		end
 		return
 	end
 	local hp = mound:GetAttribute("HP") :: number
@@ -269,8 +259,7 @@ local function onDig(player: Player, mound: any)
 	hp -= tool.power
 	mound:SetAttribute("HP", hp)
 	local kindId = mound:GetAttribute("Kind") :: string
-	local kind = Config.Mounds[kindId]
-	Net.Effect:FireAllClients("Dig", mound.Position, kind.color, hp <= 0)
+	Net.Effect:FireAllClients("Dig", mound.Position, mound.Color, hp <= 0)
 
 	if hp > 0 then
 		updateMoundSize(mound)
@@ -278,7 +267,7 @@ local function onDig(player: Player, mound: any)
 	end
 
 	hideMound(mound)
-	reward(player, data, kind, mound.Position)
+	Rewards.Dig(player, data, kindId, zoneId, mound.Position)
 	if kindId == "Meteor" then
 		task.delay(1, function()
 			mound:Destroy()
@@ -293,15 +282,15 @@ local function onDig(player: Player, mound: any)
 end
 
 ----------------------------------------------------------------------
--- 운석 이벤트
+-- 운석 이벤트 (모든 지역에 떨어짐)
 ----------------------------------------------------------------------
 local meteors = {}
 
-local function spawnMeteor()
-	local ring = world.meteorRing
+local function spawnMeteor(zoneWorld: any)
+	local ring = zoneWorld.meteorRing
 	local angle = math.random() * math.pi * 2
 	local radius = ring.inner + math.random() * (ring.outer - ring.inner)
-	local ground = Vector3.new(math.cos(angle) * radius, METEOR_SIZE * 0.35, math.sin(angle) * radius)
+	local ground = zoneWorld.center + Vector3.new(math.cos(angle) * radius, METEOR_SIZE * 0.35, math.sin(angle) * radius)
 
 	local meteor = Instance.new("Part")
 	meteor.Shape = Enum.PartType.Ball
@@ -311,15 +300,14 @@ local function spawnMeteor()
 	meteor.CanQuery = false
 	meteor.CanCollide = false
 	meteor.Position = ground + Vector3.new(30, 200, 20)
-	meteor:SetAttribute("Spot", ground)
-	setupMound(meteor, "Meteor")
+	setupMound(meteor, "Meteor", zoneWorld.id)
 	addSparkle(meteor, Color3.fromRGB(180, 90, 255))
 	local fire = Instance.new("Fire")
 	fire.Color = Color3.fromRGB(170, 90, 255)
 	fire.SecondaryColor = Color3.fromRGB(80, 200, 255)
 	fire.Size = 8
 	fire.Parent = meteor
-	meteor.Parent = world.field
+	meteor.Parent = zoneWorld.field
 	table.insert(meteors, meteor)
 
 	local tween = TweenService:Create(meteor, TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = ground })
@@ -354,9 +342,11 @@ local function meteorLoop()
 
 		ReplicatedStorage:SetAttribute("MeteorActive", true)
 		ReplicatedStorage:SetAttribute("MeteorEndsAt", workspace:GetServerTimeNow() + Config.MeteorDuration)
-		Net.Announce("☄️ 운석이 떨어지고 있어요! 발굴장 주변에서 우주 화석을 찾아보세요!", Color3.fromRGB(180, 120, 255))
-		for _ = 1, Config.MeteorCount do
-			task.delay(math.random() * 8, spawnMeteor)
+		Net.Announce("☄️ 운석이 떨어지고 있어요! 모든 발굴 지역에서 우주 화석을 찾아보세요!", Color3.fromRGB(180, 120, 255))
+		for _, zoneWorld in world.zones do
+			for _ = 1, Config.MeteorsPerZone do
+				task.delay(math.random() * 8, spawnMeteor, zoneWorld)
+			end
 		end
 		task.wait(Config.MeteorDuration)
 
@@ -373,8 +363,10 @@ end
 ----------------------------------------------------------------------
 function DigService.Init(builtWorld: any)
 	world = builtWorld
-	for _, spot in world.spots do
-		makeMound(spot, rollMoundKind())
+	for _, zoneWorld in world.zones do
+		for _, spot in zoneWorld.spots do
+			makeMound(zoneWorld, spot, rollMoundKind())
+		end
 	end
 
 	Net.Dig.OnServerEvent:Connect(onDig)
@@ -405,6 +397,7 @@ function DigService.Init(builtWorld: any)
 	end
 	Players.PlayerRemoving:Connect(function(player)
 		lastDig[player] = nil
+		lastLockedWarn[player] = nil
 	end)
 
 	task.spawn(meteorLoop)

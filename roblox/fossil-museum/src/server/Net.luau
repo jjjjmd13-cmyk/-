@@ -23,6 +23,7 @@ Net.Notify = make("RemoteEvent", "Notify") :: RemoteEvent -- 서버 → 클라: 
 Net.Sync = make("RemoteEvent", "Sync") :: RemoteEvent -- 서버 → 클라: 데이터 전체
 Net.Effect = make("RemoteEvent", "Effect") :: RemoteEvent -- 서버 → 클라: 연출
 Net.Action = make("RemoteFunction", "Action") :: RemoteFunction -- 클라 → 서버: 버튼 요청
+Net.Trade = make("RemoteEvent", "Trade") :: RemoteEvent -- 서버 → 클라: 거래 상태
 
 folder.Parent = ReplicatedStorage
 
@@ -84,10 +85,20 @@ function Net.Snapshot(player: Player): any?
 		likes = data.likes,
 		luckBoostUntil = data.luckBoostUntil,
 		stats = data.stats,
+		unlockedZones = data.unlockedZones,
+		rebirths = data.rebirths,
+		helpersOwned = data.helpersOwned,
+		helpersEquipped = data.helpersEquipped,
+		daily = data.daily,
+		quests = data.quests,
+		autoDig = data.autoDig,
 		passes = passes,
 		income = Economy.GetIncome(data, passes),
 		luck = Economy.GetLuck(data, passes, 0),
 		cooldown = Economy.GetDigCooldown(data, passes),
+		helperSlots = Economy.GetHelperSlots(passes),
+		rebirthPrice = Economy.GetRebirthPrice(data),
+		today = os.time() // 86400,
 	}
 end
 

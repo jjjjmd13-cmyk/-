@@ -3,6 +3,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Economy = require(ReplicatedStorage.Shared.Economy)
 local Util = require(ReplicatedStorage.Shared.Util)
 
 local FossilModel = {}
@@ -301,7 +302,7 @@ function FossilModel.Build(speciesId: string, base: CFrame): Model?
 	info.TextScaled = true
 	info.TextColor3 = Color3.new(1, 1, 1)
 	info.TextStrokeTransparency = 0.3
-	info.Text = string.format("%s · +%s/초", rarity.name, Util.FormatNumber(rarity.income))
+	info.Text = string.format("%s · +%s/초", rarity.name, Util.FormatNumber(Economy.SpeciesIncome(species)))
 	info.Parent = gui
 
 	if rarity.tier >= 5 then

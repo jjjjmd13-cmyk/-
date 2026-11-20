@@ -17,6 +17,10 @@ local getCooldown: () -> number = function()
 	return 0.5
 end
 local onTooFar: () -> () = function() end
+-- 자동 발굴: (켜짐 여부, 열린 지역 목록)
+local getAuto: () -> (boolean, { [string]: boolean }) = function()
+	return false, {}
+end
 
 local equippedTool: Tool? = nil
 local holding = false
@@ -112,9 +116,45 @@ local function watch(container: Instance)
 	end
 end
 
-function Digger.Init(cooldownFn: () -> number, tooFarFn: () -> ())
+local function nearestMound(unlocked: { [string]: boolean }): BasePart?
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not root then
+		return nil
+	end
+	local best, bestDist = nil, Config.DigRange - 1
+	for _, mound in CollectionService:GetTagged("DigMound") do
+		if mound:IsA("BasePart") and mound.Transparency < 1 and unlocked[mound:GetAttribute("Zone") or ""] then
+			local d = (mound.Position - root.Position).Magnitude
+			if d < bestDist then
+				best, bestDist = mound, d
+			end
+		end
+	end
+	return best
+end
+
+local function autoLoop()
+	while true do
+		local enabled, unlocked = getAuto()
+		local tool = equippedTool
+		if enabled and tool and tool.Parent == player.Character and not holding then
+			local mound = nearestMound(unlocked)
+			if mound then
+				digRemote:FireServer(mound)
+			end
+			task.wait(getCooldown())
+		else
+			task.wait(0.3)
+		end
+	end
+end
+
+function Digger.Init(cooldownFn: () -> number, tooFarFn: () -> (), autoFn: () -> (boolean, { [string]: boolean }))
 	getCooldown = cooldownFn
 	onTooFar = tooFarFn
+	getAuto = autoFn
+	task.spawn(autoLoop)
 
 	local function onCharacter(character: Model)
 		equippedTool = nil

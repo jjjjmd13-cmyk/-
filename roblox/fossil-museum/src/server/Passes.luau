@@ -11,8 +11,12 @@ local owned: { [Player]: { [string]: boolean } } = {}
 local changedEvent = Instance.new("BindableEvent")
 Passes.Changed = changedEvent.Event -- (player)
 
+local function defaults(): { [string]: boolean }
+	return { DoubleSpeed = false, DoubleLuck = false, DoubleIncome = false, AutoDig = false, ExtraHelpers = false }
+end
+
 local function check(player: Player)
-	local result = { DoubleSpeed = false, DoubleLuck = false, DoubleIncome = false }
+	local result = defaults()
 	for key, pass in Config.GamePasses do
 		if pass.id ~= 0 then
 			local ok, has = pcall(function()
@@ -25,8 +29,8 @@ local function check(player: Player)
 	changedEvent:Fire(player)
 end
 
-function Passes.Get(player: Player): { DoubleSpeed: boolean, DoubleLuck: boolean, DoubleIncome: boolean }
-	return (owned[player] or { DoubleSpeed = false, DoubleLuck = false, DoubleIncome = false }) :: any
+function Passes.Get(player: Player): any
+	return owned[player] or defaults()
 end
 
 function Passes.Init()

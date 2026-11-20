@@ -14,6 +14,7 @@ local coinsLabel: TextLabel
 local incomeLabel: TextLabel
 local boostLabel: TextLabel
 local eventLabel: TextLabel
+local serverLuckLabel: TextLabel
 local toastHolder: Frame
 local badges: { [string]: Frame } = {}
 
@@ -69,6 +70,19 @@ function Hud.Create(onMenu: (string) -> ())
 		Parent = screen,
 	})
 
+	serverLuckLabel = Gui.label({
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 94),
+		Size = UDim2.fromOffset(260, 20),
+		TextColor3 = Color3.fromRGB(255, 235, 120),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextStrokeTransparency = 0.4,
+		Text = "",
+		MaxTextSize = 16,
+		Visible = false,
+		Parent = screen,
+	})
+
 	-- 운석 이벤트 배너
 	local banner = Gui.new("Frame", {
 		Name = "Event",
@@ -93,26 +107,29 @@ function Hud.Create(onMenu: (string) -> ())
 		Name = "Menu",
 		AnchorPoint = Vector2.new(0, 0.5),
 		Position = UDim2.new(0, 10, 0.5, 0),
-		Size = UDim2.fromOffset(120, 4 * 52),
+		Size = UDim2.fromOffset(2 * 108 + 6, 4 * 46 + 3 * 6),
 		BackgroundTransparency = 1,
 		Parent = screen,
 	}, {
-		Gui.new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }),
+		Gui.new("UIGridLayout", { CellSize = UDim2.fromOffset(108, 46), CellPadding = UDim2.fromOffset(6, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
 	})
 	local buttons = {
 		{ id = "Collection", text = "📖 도감", color = Color3.fromRGB(200, 140, 60) },
 		{ id = "Shop", text = "🛒 상점", color = Gui.Colors.Green },
-		{ id = "Museum", text = "🏛️ 내 박물관", color = Gui.Colors.Blue },
-		{ id = "Field", text = "⛏️ 발굴장", color = Color3.fromRGB(150, 100, 70) },
+		{ id = "Zones", text = "🗺️ 지역", color = Color3.fromRGB(60, 140, 210) },
+		{ id = "Helpers", text = "🦖 조수", color = Color3.fromRGB(90, 170, 80) },
+		{ id = "Quests", text = "📜 퀘스트", color = Color3.fromRGB(210, 160, 50) },
+		{ id = "Rebirth", text = "🔁 환생", color = Color3.fromRGB(190, 80, 200) },
+		{ id = "Trade", text = "🤝 거래", color = Color3.fromRGB(70, 160, 200) },
+		{ id = "Museum", text = "🏛️ 박물관", color = Color3.fromRGB(150, 110, 80) },
 	}
 	for i, info in buttons do
 		local b = Gui.button({
 			Name = info.id,
 			LayoutOrder = i,
-			Size = UDim2.fromOffset(120, 44),
 			BackgroundColor3 = info.color,
 			Text = info.text,
-			MaxTextSize = 18,
+			MaxTextSize = 17,
 			Parent = menu,
 		}, function()
 			onMenu(info.id)
@@ -175,6 +192,46 @@ end
 
 function Hud.SetEvent(text: string)
 	eventLabel.Text = text
+end
+
+function Hud.SetServerLuck(secondsLeft: number)
+	if secondsLeft > 0 then
+		serverLuckLabel.Visible = true
+		serverLuckLabel.Text = "🌟 서버 행운 2배 " .. Util.FormatTime(secondsLeft)
+	else
+		serverLuckLabel.Visible = false
+	end
+end
+
+-- 예/아니오 창 (거래 요청 등)
+function Hud.Prompt(text: string, yesText: string, noText: string, onAnswer: (boolean) -> (), timeout: number?)
+	local frame = Gui.new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 110),
+		Size = UDim2.fromOffset(360, 110),
+		BackgroundColor3 = Gui.Colors.Panel,
+		ZIndex = 30,
+		Parent = screen,
+	}, { Gui.corner(14), Gui.stroke(Gui.Colors.Blue, 3) })
+	Gui.label({ Position = UDim2.fromOffset(12, 8), Size = UDim2.new(1, -24, 0, 44), Text = text, TextXAlignment = Enum.TextXAlignment.Center, TextWrapped = true, MaxTextSize = 18, ZIndex = 31, Parent = frame })
+	local answered = false
+	local function answer(value: boolean)
+		if answered then
+			return
+		end
+		answered = true
+		frame:Destroy()
+		onAnswer(value)
+	end
+	Gui.button({ Position = UDim2.new(0, 12, 1, -50), Size = UDim2.new(0.5, -18, 0, 40), BackgroundColor3 = Gui.Colors.Green, Text = yesText, ZIndex = 31, Parent = frame }, function()
+		answer(true)
+	end)
+	Gui.button({ Position = UDim2.new(0.5, 6, 1, -50), Size = UDim2.new(0.5, -18, 0, 40), BackgroundColor3 = Gui.Colors.Red, Text = noText, ZIndex = 31, Parent = frame }, function()
+		answer(false)
+	end)
+	task.delay(timeout or 30, function()
+		answer(false)
+	end)
 end
 
 function Hud.SetBadge(id: string, visible: boolean)

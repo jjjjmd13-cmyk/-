@@ -47,6 +47,7 @@ def script_item(path: Path) -> str:
 
 def folder(name: str, path: Path) -> str:
     children = [script_item(p) for p in sorted(path.glob("*.luau"))]
+    children += [folder(p.name, p) for p in sorted(path.iterdir()) if p.is_dir()]
     return item("Folder", name, children)
 
 

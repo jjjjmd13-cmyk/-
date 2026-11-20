@@ -24,7 +24,15 @@ local TEMPLATE = {
 	luckBoostUntil = 0,
 	lastOnline = 0,
 	purchases = {}, -- 처리한 개발자 상품 PurchaseId (중복 지급 방지)
-	stats = { dug = 0, found = 0 },
+	unlockedZones = { Desert = true },
+	rebirths = 0,
+	helpersOwned = {}, -- [helperId] = 가진 개수
+	helpersEquipped = {}, -- { helperId, ... }
+	daily = { last = 0, streak = 0 }, -- 마지막으로 받은 날짜 번호, 연속 일수
+	quests = { day = 0, list = {} },
+	weekLikes = { week = 0, count = 0 },
+	autoDig = true, -- 자동 발굴 패스가 있을 때 켜짐/꺼짐
+	stats = { dug = 0, found = 0, meteors = 0, helperDug = 0, totalEarned = 0 },
 }
 
 type Profile = {
@@ -65,6 +73,11 @@ end
 
 function DataService.Today(): number
 	return os.time() // 86400
+end
+
+-- 월요일 기준 주 번호
+function DataService.Week(): number
+	return (os.time() // 86400 + 3) // 7
 end
 
 local function load(player: Player)
@@ -115,8 +128,16 @@ local function load(player: Player)
 			data.likedGiven[target] = nil
 		end
 	end
-	if not Config.ToolsById[data.tool] then
+	if not Config.ToolsById[data.tool] or not data.ownedTools[data.tool] then
 		data.tool = "WoodShovel"
+		data.ownedTools.WoodShovel = true
+	end
+	-- 없어진 조수 정리
+	for i = #data.helpersEquipped, 1, -1 do
+		local id = data.helpersEquipped[i]
+		if not Config.HelperById[id] or (data.helpersOwned[id] or 0) <= 0 then
+			table.remove(data.helpersEquipped, i)
+		end
 	end
 
 	local offlineSeconds = 0

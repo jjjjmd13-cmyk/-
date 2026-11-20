@@ -9,6 +9,8 @@ local DataService = require(script.Parent.DataService)
 local Passes = require(script.Parent.Passes)
 local Net = require(script.Parent.Net)
 local FossilModel = require(script.Parent.FossilModel)
+local QuestService = require(script.Parent.QuestService)
+local Zones = require(script.Parent.Zones)
 
 local MuseumService = {}
 
@@ -143,6 +145,10 @@ local function setupLeaderstats(player: Player, data: any)
 	fossils.Name = "화석"
 	fossils.Value = countCompleted(data)
 	fossils.Parent = stats
+	local rebirths = Instance.new("IntValue")
+	rebirths.Name = "환생"
+	rebirths.Value = data.rebirths
+	rebirths.Parent = stats
 	stats.Parent = player
 end
 
@@ -172,6 +178,12 @@ local function onLike(liker: Player, plot: Model)
 	end
 	likerData.likedGiven[key] = today
 	ownerData.likes += 1
+	local week = DataService.Week()
+	if ownerData.weekLikes.week ~= week then
+		ownerData.weekLikes = { week = week, count = 0 }
+	end
+	ownerData.weekLikes.count += 1
+	QuestService.Progress(liker, "Like")
 	Net.Tell(liker, owner.DisplayName .. "님의 박물관에 좋아요를 눌렀어요 ❤️", Color3.fromRGB(255, 130, 160))
 	Net.Tell(owner, liker.DisplayName .. "님이 내 박물관에 좋아요를 눌렀어요! ❤️ (수입 +1%)", Color3.fromRGB(255, 130, 160))
 	Net.MarkDirty(owner)
@@ -195,6 +207,7 @@ Net.Handle("Assemble", function(player, speciesId)
 		end
 	end
 	data.museum[speciesId] = (data.museum[speciesId] or 0) + 1
+	QuestService.Progress(player, "Assemble")
 	local rarity = Config.RarityById[species.rarity]
 	if rarity.tier >= Config.AnnounceTier then
 		Net.Announce(string.format("🏛️ %s님이 [%s] %s 화석을 완성했어요!", player.DisplayName, rarity.name, species.name), rarity.color)
@@ -236,8 +249,13 @@ Net.Handle("Teleport", function(player, target)
 		-- 입구에서 안쪽(전시대 방향)을 바라보도록
 		root.CFrame = entry.CFrame * CFrame.Angles(0, math.pi, 0) + Vector3.new(0, 2, 0)
 		return true, nil
-	elseif target == "Field" then
-		root.CFrame = world.fieldSpawn
+	elseif type(target) == "string" and Config.ZoneById[target] then
+		local data = DataService.Get(player)
+		local zone = Zones.Get(target)
+		if not Zones.IsUnlocked(data, target) then
+			return false, "🔒 먼저 지역을 열어야 해요"
+		end
+		root.CFrame = zone.spawn
 		return true, nil
 	end
 	return false, nil
@@ -258,12 +276,14 @@ function MuseumService.Init(builtWorld: any)
 	end
 
 	DataService.Loaded:Connect(function(player: Player, data: any, offlineSeconds: number)
+		QuestService.OnLoaded(player, data)
 		setupLeaderstats(player, data)
 		assignPlot(player)
 		if offlineSeconds > 60 then
 			local earned = math.floor(Economy.GetIncome(data, Passes.Get(player)) * Config.OfflineRate * offlineSeconds)
 			if earned > 0 then
 				data.coins += earned
+				data.stats.totalEarned += earned
 				task.delay(3, function()
 					if player.Parent then
 						Net.Notify:FireClient(player, { kind = "Offline", coins = earned, seconds = offlineSeconds })
@@ -282,6 +302,10 @@ function MuseumService.Init(builtWorld: any)
 		if data and fossils then
 			fossils.Value = countCompleted(data)
 		end
+		local rebirths = stats and stats:FindFirstChild("환생") :: IntValue?
+		if data and rebirths then
+			rebirths.Value = data.rebirths
+		end
 	end)
 
 	Players.PlayerRemoving:Connect(releasePlot)
@@ -299,6 +323,7 @@ function MuseumService.Init(builtWorld: any)
 					carry[player] = total - whole
 					if whole > 0 then
 						data.coins += whole
+						data.stats.totalEarned += whole
 						Net.UpdateCoins(player)
 					end
 				end
