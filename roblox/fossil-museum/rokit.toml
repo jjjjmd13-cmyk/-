@@ -1,0 +1,5 @@
+# rokit install 으로 아래 도구를 설치할 수 있어요 (https://github.com/rojo-rbx/rokit)
+[tools]
+rojo = "rojo-rbx/rojo@7.4.4"
+selene = "Kampfkarren/selene@0.27.1"
+stylua = "JohnnyMorganz/StyLua@2.0.2"

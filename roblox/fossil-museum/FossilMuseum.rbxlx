@@ -1,0 +1,3438 @@
+<roblox version="4"><Item class="ReplicatedStorage" referent="RBX00000005"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX00000004"><Properties><string name="Name">Shared</string></Properties><Item class="ModuleScript" referent="RBX00000001"><Properties><string name="Name">Config</string><string name="Source"><![CDATA[--!strict
+-- 화석 박물관: 게임 전체 설정값
+-- 숫자(가격, 확률, 수입)를 바꿔서 밸런스를 조정하세요.
+
+local Config = {}
+
+----------------------------------------------------------------------
+-- 수익화 (Robux)
+-- Creator Dashboard 에서 게임 패스 / 개발자 상품을 만든 뒤 ID 를 넣으세요.
+-- ID 가 0 이면 상점에 "준비 중" 으로 표시되고 구매할 수 없습니다.
+----------------------------------------------------------------------
+Config.GamePasses = {
+	DoubleSpeed = { id = 0, name = "⚡ 발굴 속도 2배", desc = "삽질 속도가 영원히 2배" },
+	DoubleLuck = { id = 0, name = "🍀 행운 2배", desc = "희귀 화석이 나올 확률 2배" },
+	DoubleIncome = { id = 0, name = "🏛️ 박물관 수입 2배", desc = "관람객 수입이 영원히 2배" },
+}
+
+-- coinsSeconds: 현재 초당 수입 × 이 값 만큼 코인 지급 (최소 minCoins)
+Config.Products = {
+	CoinsSmall = { id = 0, name = "💰 코인 주머니", coinsSeconds = 600, minCoins = 2000 },
+	CoinsMedium = { id = 0, name = "💰 코인 상자", coinsSeconds = 3000, minCoins = 12000 },
+	CoinsLarge = { id = 0, name = "💰 코인 금고", coinsSeconds = 12000, minCoins = 60000 },
+	LuckBoost = { id = 0, name = "🍀 행운 부스트 15분", minutes = 15 },
+}
+
+----------------------------------------------------------------------
+-- 희귀도
+----------------------------------------------------------------------
+export type Rarity = {
+	id: string,
+	name: string,
+	tier: number,
+	color: Color3,
+	weight: number, -- 뽑기 가중치 (행운 적용 전)
+	income: number, -- 완성 화석 1개 전시 시 초당 코인
+	sell: number, -- 중복 조각 1개 판매가
+	eventOnly: boolean?,
+}
+
+Config.Rarities = {
+	{ id = "Common", name = "일반", tier = 1, color = Color3.fromRGB(205, 205, 205), weight = 6000, income = 1, sell = 4 },
+	{ id = "Uncommon", name = "고급", tier = 2, color = Color3.fromRGB(95, 210, 95), weight = 2500, income = 4, sell = 15 },
+	{ id = "Rare", name = "희귀", tier = 3, color = Color3.fromRGB(70, 145, 255), weight = 1000, income = 15, sell = 60 },
+	{ id = "Epic", name = "영웅", tier = 4, color = Color3.fromRGB(175, 85, 255), weight = 400, income = 60, sell = 250 },
+	{ id = "Legendary", name = "전설", tier = 5, color = Color3.fromRGB(255, 175, 35), weight = 90, income = 250, sell = 1000 },
+	{ id = "Mythic", name = "신화", tier = 6, color = Color3.fromRGB(255, 70, 110), weight = 10, income = 1200, sell = 5000 },
+	{ id = "Cosmic", name = "우주", tier = 7, color = Color3.fromRGB(110, 255, 235), weight = 0, income = 700, sell = 3000, eventOnly = true },
+} :: { Rarity }
+
+Config.RarityById = {} :: { [string]: Rarity }
+for _, r in Config.Rarities do
+	Config.RarityById[r.id] = r
+end
+
+----------------------------------------------------------------------
+-- 뼈대 모양별 조각 이름
+----------------------------------------------------------------------
+Config.ShapePieces = {
+	Quadruped = { "두개골", "척추", "갈비뼈", "앞다리", "뒷다리" },
+	Biped = { "두개골", "척추", "갈비뼈", "다리", "꼬리" },
+	Flyer = { "두개골", "몸통", "날개", "다리" },
+	Swimmer = { "두개골", "척추", "지느러미", "꼬리" },
+} :: { [string]: { string } }
+
+----------------------------------------------------------------------
+-- 화석 종류
+-- look: 모형 모양 (scale 크기, neck 목 길이, tail 꼬리 길이, 장식 옵션)
+----------------------------------------------------------------------
+export type Look = {
+	scale: number?,
+	neck: number?,
+	tail: number?,
+	head: number?,
+	horns: boolean?,
+	plates: boolean?,
+	sail: boolean?,
+	tusks: boolean?,
+	club: boolean?,
+}
+
+export type Species = {
+	id: string,
+	name: string,
+	rarity: string,
+	shape: string,
+	look: Look,
+}
+
+Config.Species = {
+	-- 일반
+	{ id = "Protoceratops", name = "프로토케라톱스", rarity = "Common", shape = "Quadruped", look = { scale = 0.75, neck = 0.5, tail = 0.8, horns = true } },
+	{ id = "Compsognathus", name = "콤프소그나투스", rarity = "Common", shape = "Biped", look = { scale = 0.6, head = 0.7, tail = 1.2 } },
+	{ id = "Dimetrodon", name = "디메트로돈", rarity = "Common", shape = "Quadruped", look = { scale = 0.8, neck = 0.4, tail = 1.1, sail = true } },
+	-- 고급
+	{ id = "Iguanodon", name = "이구아노돈", rarity = "Uncommon", shape = "Biped", look = { scale = 0.9, head = 0.8, tail = 1.0 } },
+	{ id = "Ankylosaurus", name = "안킬로사우루스", rarity = "Uncommon", shape = "Quadruped", look = { scale = 0.95, neck = 0.4, tail = 1.0, plates = true, club = true } },
+	{ id = "Pteranodon", name = "프테라노돈", rarity = "Uncommon", shape = "Flyer", look = { scale = 0.9 } },
+	-- 희귀
+	{ id = "Triceratops", name = "트리케라톱스", rarity = "Rare", shape = "Quadruped", look = { scale = 1.1, neck = 0.5, tail = 0.9, horns = true } },
+	{ id = "Stegosaurus", name = "스테고사우루스", rarity = "Rare", shape = "Quadruped", look = { scale = 1.05, neck = 0.6, tail = 1.2, plates = true } },
+	{ id = "Velociraptor", name = "벨로키랍토르", rarity = "Rare", shape = "Biped", look = { scale = 0.8, head = 0.8, tail = 1.4 } },
+	-- 영웅
+	{ id = "Spinosaurus", name = "스피노사우루스", rarity = "Epic", shape = "Biped", look = { scale = 1.15, head = 1.0, tail = 1.3, sail = true } },
+	{ id = "Mosasaurus", name = "모사사우루스", rarity = "Epic", shape = "Swimmer", look = { scale = 1.1, neck = 0.6 } },
+	{ id = "Mammoth", name = "매머드", rarity = "Epic", shape = "Quadruped", look = { scale = 1.15, neck = 0.3, tail = 0.3, tusks = true } },
+	-- 전설
+	{ id = "Tyrannosaurus", name = "티라노사우루스", rarity = "Legendary", shape = "Biped", look = { scale = 1.3, head = 1.4, tail = 1.2 } },
+	{ id = "Brachiosaurus", name = "브라키오사우루스", rarity = "Legendary", shape = "Quadruped", look = { scale = 1.2, neck = 2.2, tail = 1.2 } },
+	{ id = "Megalodon", name = "메갈로돈", rarity = "Legendary", shape = "Swimmer", look = { scale = 1.25, neck = 0.2, head = 1.4 } },
+	-- 신화
+	{ id = "CrystalDragon", name = "수정 드래곤", rarity = "Mythic", shape = "Flyer", look = { scale = 1.3, horns = true } },
+	-- 우주 (운석 이벤트 전용)
+	{ id = "StarRaptor", name = "별빛 랩터", rarity = "Cosmic", shape = "Biped", look = { scale = 0.95, head = 0.9, tail = 1.5 } },
+	{ id = "VoidWhale", name = "공허 고래", rarity = "Cosmic", shape = "Swimmer", look = { scale = 1.25, neck = 0.3, head = 1.2 } },
+	{ id = "MeteorWyvern", name = "운석 와이번", rarity = "Cosmic", shape = "Flyer", look = { scale = 1.15, horns = true } },
+} :: { Species }
+
+Config.SpeciesById = {} :: { [string]: Species }
+Config.SpeciesByRarity = {} :: { [string]: { Species } }
+for _, s in Config.Species do
+	Config.SpeciesById[s.id] = s
+	local list = Config.SpeciesByRarity[s.rarity]
+	if not list then
+		list = {}
+		Config.SpeciesByRarity[s.rarity] = list
+	end
+	table.insert(list, s)
+end
+
+function Config.GetPieces(species: Species): { string }
+	return Config.ShapePieces[species.shape]
+end
+
+----------------------------------------------------------------------
+-- 발굴 도구
+----------------------------------------------------------------------
+export type DigTool = {
+	id: string,
+	name: string,
+	price: number,
+	power: number, -- 한 번에 깎는 흙더미 체력
+	cooldown: number, -- 삽질 간격(초)
+	luck: number, -- 행운 보너스 (+0.1 = +10%)
+	color: Color3,
+}
+
+Config.Tools = {
+	{ id = "WoodShovel", name = "나무 삽", price = 0, power = 1, cooldown = 0.55, luck = 0, color = Color3.fromRGB(150, 105, 60) },
+	{ id = "StoneShovel", name = "돌 삽", price = 300, power = 2, cooldown = 0.5, luck = 0.05, color = Color3.fromRGB(130, 130, 135) },
+	{ id = "IronShovel", name = "철 삽", price = 2500, power = 3, cooldown = 0.45, luck = 0.15, color = Color3.fromRGB(200, 200, 210) },
+	{ id = "GoldShovel", name = "황금 삽", price = 20000, power = 5, cooldown = 0.4, luck = 0.3, color = Color3.fromRGB(255, 200, 40) },
+	{ id = "DiamondDrill", name = "다이아 드릴", price = 150000, power = 8, cooldown = 0.32, luck = 0.5, color = Color3.fromRGB(90, 230, 255) },
+	{ id = "LaserDrill", name = "레이저 드릴", price = 1000000, power = 14, cooldown = 0.25, luck = 0.9, color = Color3.fromRGB(255, 60, 90) },
+} :: { DigTool }
+
+Config.ToolsById = {} :: { [string]: DigTool }
+for _, t in Config.Tools do
+	Config.ToolsById[t.id] = t
+end
+
+Config.DigRange = 16 -- 캐릭터와 흙더미 사이 최대 거리(스터드)
+
+----------------------------------------------------------------------
+-- 흙더미 종류
+----------------------------------------------------------------------
+export type MoundKind = {
+	id: string,
+	name: string,
+	hp: number,
+	coins: number,
+	pieceChance: number,
+	luck: number,
+	cosmicChance: number,
+	color: Color3,
+	spawnWeight: number,
+}
+
+Config.Mounds = {
+	Dirt = { id = "Dirt", name = "흙더미", hp = 4, coins = 2, pieceChance = 0.55, luck = 0, cosmicChance = 0, color = Color3.fromRGB(125, 88, 58), spawnWeight = 92 },
+	Sparkle = { id = "Sparkle", name = "반짝이는 흙더미", hp = 10, coins = 10, pieceChance = 1, luck = 1, cosmicChance = 0, color = Color3.fromRGB(170, 130, 70), spawnWeight = 8 },
+	Meteor = { id = "Meteor", name = "운석", hp = 18, coins = 40, pieceChance = 1, luck = 2, cosmicChance = 0.35, color = Color3.fromRGB(80, 40, 120), spawnWeight = 0 },
+} :: { [string]: MoundKind }
+
+Config.MoundRespawnTime = 12
+
+----------------------------------------------------------------------
+-- 박물관
+----------------------------------------------------------------------
+Config.StartSlots = 4
+Config.MaxSlots = 16
+Config.SlotStep = 2
+-- 다음 전시대 확장 가격 (4→6, 6→8, ...)
+Config.SlotPrices = { 400, 3000, 15000, 60000, 250000, 1000000 }
+
+Config.LikeBonus = 0.01 -- 좋아요 1개당 수입 +1%
+Config.MaxLikeBonus = 1.0 -- 최대 +100%
+Config.UniqueBonus = 0.03 -- 서로 다른 화석 1종 완성당 수입 +3%
+
+Config.OfflineRate = 0.5 -- 접속하지 않은 동안 수입의 50%
+Config.OfflineMaxSeconds = 3 * 60 * 60 -- 최대 3시간
+
+----------------------------------------------------------------------
+-- 운석 낙하 이벤트
+----------------------------------------------------------------------
+Config.MeteorInterval = 8 * 60 -- 이벤트 사이 간격(초)
+Config.MeteorDuration = 2 * 60 -- 이벤트 지속시간(초)
+Config.MeteorCount = 14
+
+Config.AnnounceTier = 5 -- 이 등급 이상을 찾으면 서버 전체에 알림
+
+return Config
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000002"><Properties><string name="Name">Economy</string><string name="Source"><![CDATA[-- 뽑기 확률, 박물관 수입 계산 (서버와 클라이언트가 같이 사용)
+local Config = require(script.Parent.Config)
+
+local Economy = {}
+
+export type Passes = { DoubleSpeed: boolean, DoubleLuck: boolean, DoubleIncome: boolean }
+
+-- 행운 배수: 1 = 기본, 2 = 희귀 이상 확률이 크게 증가
+function Economy.GetLuck(data: any, passes: Passes, moundLuck: number): number
+	local tool = Config.ToolsById[data.tool] or Config.Tools[1]
+	local luck = 1 + tool.luck + moundLuck
+	if passes.DoubleLuck then
+		luck *= 2
+	end
+	if (data.luckBoostUntil or 0) > os.time() then
+		luck *= 1.5
+	end
+	return luck
+end
+
+local function pickWeighted<T>(items: { T }, weightOf: (T) -> number): T
+	local total = 0
+	for _, item in items do
+		total += weightOf(item)
+	end
+	local roll = math.random() * total
+	for _, item in items do
+		roll -= weightOf(item)
+		if roll <= 0 then
+			return item
+		end
+	end
+	return items[#items]
+end
+
+-- 조각 하나 뽑기. 반환: speciesId, pieceIndex
+function Economy.RollPiece(luck: number, cosmicChance: number): (string, number)
+	local rarity
+	if cosmicChance > 0 and math.random() < cosmicChance then
+		rarity = Config.RarityById.Cosmic
+	else
+		local pool = {}
+		for _, r in Config.Rarities do
+			if not r.eventOnly and r.weight > 0 then
+				table.insert(pool, r)
+			end
+		end
+		rarity = pickWeighted(pool, function(r)
+			-- 등급이 높을수록 행운의 영향을 크게 받음
+			return r.weight * luck ^ ((r.tier - 1) * 0.6)
+		end)
+	end
+	local speciesList = Config.SpeciesByRarity[rarity.id]
+	local species = speciesList[math.random(1, #speciesList)]
+	local pieceCount = #Config.GetPieces(species)
+	return species.id, math.random(1, pieceCount)
+end
+
+-- 전시 중인 화석 목록 (수입 높은 순, 전시대 개수만큼)
+function Economy.GetDisplayed(data: any): { string }
+	local list = {}
+	for speciesId, count in data.museum do
+		if Config.SpeciesById[speciesId] then
+			for _ = 1, math.min(count, data.slots) do
+				table.insert(list, speciesId)
+			end
+		end
+	end
+	table.sort(list, function(a, b)
+		local ra = Config.RarityById[Config.SpeciesById[a].rarity]
+		local rb = Config.RarityById[Config.SpeciesById[b].rarity]
+		if ra.income ~= rb.income then
+			return ra.income > rb.income
+		end
+		return a < b
+	end)
+	while #list > data.slots do
+		table.remove(list)
+	end
+	return list
+end
+
+function Economy.GetIncomeMultiplier(data: any, passes: Passes): number
+	local unique = 0
+	for speciesId, count in data.museum do
+		if count > 0 and Config.SpeciesById[speciesId] then
+			unique += 1
+		end
+	end
+	local mult = 1
+	mult += math.min(data.likes * Config.LikeBonus, Config.MaxLikeBonus)
+	mult += unique * Config.UniqueBonus
+	if passes.DoubleIncome then
+		mult *= 2
+	end
+	return mult
+end
+
+-- 초당 수입
+function Economy.GetIncome(data: any, passes: Passes): number
+	local base = 0
+	for _, speciesId in Economy.GetDisplayed(data) do
+		base += Config.RarityById[Config.SpeciesById[speciesId].rarity].income
+	end
+	return base * Economy.GetIncomeMultiplier(data, passes)
+end
+
+function Economy.HasAllPieces(data: any, speciesId: string): boolean
+	local species = Config.SpeciesById[speciesId]
+	local owned = data.pieces[speciesId]
+	if not species or not owned then
+		return false
+	end
+	for i = 1, #Config.GetPieces(species) do
+		if (owned[tostring(i)] or 0) < 1 then
+			return false
+		end
+	end
+	return true
+end
+
+-- 중복 조각(각 조각 1개씩 남기고) 판매 가격
+function Economy.GetDuplicateValue(data: any): number
+	local total = 0
+	for speciesId, owned in data.pieces do
+		local species = Config.SpeciesById[speciesId]
+		if species then
+			local price = Config.RarityById[species.rarity].sell
+			for _, count in owned do
+				if count > 1 then
+					total += (count - 1) * price
+				end
+			end
+		end
+	end
+	return total
+end
+
+function Economy.GetNextSlotPrice(data: any): number?
+	if data.slots >= Config.MaxSlots then
+		return nil
+	end
+	local index = (data.slots - Config.StartSlots) // Config.SlotStep + 1
+	return Config.SlotPrices[index]
+end
+
+function Economy.GetDigCooldown(data: any, passes: Passes): number
+	local tool = Config.ToolsById[data.tool] or Config.Tools[1]
+	return tool.cooldown * (if passes.DoubleSpeed then 0.5 else 1)
+end
+
+return Economy
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000003"><Properties><string name="Name">Util</string><string name="Source"><![CDATA[local Util = {}
+
+local SUFFIXES = { "", "K", "M", "B", "T", "Qa", "Qi" }
+
+-- 1234 -> "1,234", 1234567 -> "1.23M"
+function Util.FormatNumber(n: number): string
+	n = math.floor(n)
+	if n < 100000 then
+		local s = tostring(n)
+		local formatted = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+		if formatted:sub(1, 1) == "," then
+			formatted = formatted:sub(2)
+		end
+		return formatted
+	end
+	local index = 1
+	local value = n
+	while value >= 1000 and index < #SUFFIXES do
+		value /= 1000
+		index += 1
+	end
+	return string.format("%.2f%s", value, SUFFIXES[index])
+end
+
+function Util.FormatTime(seconds: number): string
+	seconds = math.max(0, math.floor(seconds))
+	local h = seconds // 3600
+	local m = (seconds % 3600) // 60
+	local s = seconds % 60
+	if h > 0 then
+		return string.format("%d:%02d:%02d", h, m, s)
+	end
+	return string.format("%d:%02d", m, s)
+end
+
+function Util.DeepCopy<T>(value: T): T
+	if type(value) ~= "table" then
+		return value
+	end
+	local copy = {}
+	for k, v in value :: any do
+		copy[k] = Util.DeepCopy(v)
+	end
+	return copy :: any
+end
+
+return Util
+]]></string></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX00000010"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Folder" referent="RBX0000000F"><Properties><string name="Name">Server</string></Properties><Item class="ModuleScript" referent="RBX00000006"><Properties><string name="Name">DataService</string><string name="Source"><![CDATA[-- 플레이어 데이터 불러오기 / 저장
+local DataStoreService = game:GetService("DataStoreService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local Util = require(ReplicatedStorage.Shared.Util)
+
+local DataService = {}
+
+local STORE_NAME = "FossilMuseum_v1"
+local AUTOSAVE_INTERVAL = 120
+
+local TEMPLATE = {
+	coins = 0,
+	tool = "WoodShovel",
+	ownedTools = { WoodShovel = true },
+	pieces = {}, -- [speciesId] = { ["1"] = 개수, ["2"] = 개수, ... }
+	museum = {}, -- [speciesId] = 완성한 개수
+	slots = Config.StartSlots,
+	likes = 0,
+	likedGiven = {}, -- [대상 UserId] = 좋아요 누른 날짜 번호
+	luckBoostUntil = 0,
+	lastOnline = 0,
+	purchases = {}, -- 처리한 개발자 상품 PurchaseId (중복 지급 방지)
+	stats = { dug = 0, found = 0 },
+}
+
+type Profile = {
+	data: any,
+	canSave: boolean,
+}
+
+local profiles: { [Player]: Profile } = {}
+local loadedEvent = Instance.new("BindableEvent")
+DataService.Loaded = loadedEvent.Event -- (player, data, offlineSeconds)
+
+local store: DataStore? = nil
+do
+	local ok, result = pcall(function()
+		return DataStoreService:GetDataStore(STORE_NAME)
+	end)
+	if ok then
+		store = result
+	else
+		warn("[DataService] DataStore 를 사용할 수 없어요:", result)
+	end
+end
+
+local function keyFor(player: Player): string
+	return "u_" .. player.UserId
+end
+
+-- 저장된 데이터에 없는 항목을 기본값으로 채움 (업데이트로 항목이 늘어났을 때)
+local function reconcile(data: any, template: any)
+	for key, value in template do
+		if data[key] == nil then
+			data[key] = Util.DeepCopy(value)
+		elseif type(value) == "table" and type(data[key]) == "table" and next(value) ~= nil then
+			reconcile(data[key], value)
+		end
+	end
+end
+
+function DataService.Today(): number
+	return os.time() // 86400
+end
+
+local function load(player: Player)
+	local data = nil
+	local failed = false
+
+	if store then
+		for attempt = 1, 3 do
+			local ok, result = pcall(function()
+				return (store :: DataStore):GetAsync(keyFor(player))
+			end)
+			if ok then
+				data = result
+				failed = false
+				break
+			end
+			failed = true
+			warn(string.format("[DataService] %s 데이터 불러오기 실패 (%d/3): %s", player.Name, attempt, tostring(result)))
+			if RunService:IsStudio() then
+				break -- Studio 에서는 기다리지 않고 바로 임시 데이터로 시작
+			end
+			task.wait(attempt * 1.5)
+		end
+	else
+		failed = true
+	end
+
+	if failed and not RunService:IsStudio() then
+		player:Kick("데이터를 불러오지 못했어요. 잠시 후 다시 접속해 주세요.")
+		return
+	end
+	if failed then
+		warn("[DataService] Studio 테스트: 임시 데이터로 시작합니다 (저장 안 됨). 게임 설정 > 보안 > 'Studio에서 API 서비스 사용'을 켜면 저장돼요.")
+	end
+	if player.Parent == nil then
+		return
+	end
+
+	if type(data) ~= "table" then
+		data = Util.DeepCopy(TEMPLATE)
+	end
+	reconcile(data, TEMPLATE)
+
+	-- 오래된 좋아요 기록 정리
+	local today = DataService.Today()
+	for target, day in data.likedGiven do
+		if day ~= today then
+			data.likedGiven[target] = nil
+		end
+	end
+	if not Config.ToolsById[data.tool] then
+		data.tool = "WoodShovel"
+	end
+
+	local offlineSeconds = 0
+	if data.lastOnline > 0 then
+		offlineSeconds = math.clamp(os.time() - data.lastOnline, 0, Config.OfflineMaxSeconds)
+	end
+	data.lastOnline = os.time()
+
+	profiles[player] = { data = data, canSave = not failed }
+	loadedEvent:Fire(player, data, offlineSeconds)
+end
+
+function DataService.Get(player: Player): any
+	local profile = profiles[player]
+	return profile and profile.data
+end
+
+function DataService.Save(player: Player): boolean
+	local profile = profiles[player]
+	if not profile or not profile.canSave or not store then
+		return false
+	end
+	profile.data.lastOnline = os.time()
+	local ok, err = pcall(function()
+		(store :: DataStore):UpdateAsync(keyFor(player), function()
+			return profile.data
+		end)
+	end)
+	if not ok then
+		warn(string.format("[DataService] %s 저장 실패: %s", player.Name, tostring(err)))
+	end
+	return ok
+end
+
+function DataService.Init()
+	Players.PlayerAdded:Connect(load)
+	for _, player in Players:GetPlayers() do
+		task.spawn(load, player)
+	end
+
+	Players.PlayerRemoving:Connect(function(player)
+		DataService.Save(player)
+		profiles[player] = nil
+	end)
+
+	task.spawn(function()
+		while true do
+			task.wait(AUTOSAVE_INTERVAL)
+			for player in profiles do
+				task.spawn(DataService.Save, player)
+			end
+		end
+	end)
+
+	game:BindToClose(function()
+		local pending = 0
+		for player in profiles do
+			pending += 1
+			task.spawn(function()
+				DataService.Save(player)
+				pending -= 1
+			end)
+		end
+		local started = os.clock()
+		while pending > 0 and os.clock() - started < 25 do
+			task.wait(0.1)
+		end
+	end)
+end
+
+return DataService
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000007"><Properties><string name="Name">DigService</string><string name="Source"><![CDATA[-- 발굴: 흙더미 생성, 삽질 처리, 보상, 운석 이벤트, 도구 지급
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local Economy = require(ReplicatedStorage.Shared.Economy)
+local DataService = require(script.Parent.DataService)
+local Passes = require(script.Parent.Passes)
+local Net = require(script.Parent.Net)
+
+local DigService = {}
+
+local TAG = "DigMound"
+local MOUND_SIZE = Vector3.new(6, 3, 6)
+local METEOR_SIZE = 5
+
+local world: any = nil
+local lastDig: { [Player]: number } = {}
+
+----------------------------------------------------------------------
+-- 도구
+----------------------------------------------------------------------
+local function buildTool(def: Config.DigTool): Tool
+	local tool = Instance.new("Tool")
+	tool.Name = def.name
+	tool.CanBeDropped = false
+	tool.ToolTip = "흙더미를 클릭하거나 누르고 있으면 파요"
+	tool:SetAttribute("DigTool", def.id)
+	-- 손잡이 끝을 쥐고, 삽날이 앞쪽으로
+	tool.Grip = CFrame.fromMatrix(Vector3.new(0, 0, -1.5), Vector3.new(0, 1, 0), Vector3.new(0, 0, 1))
+
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.new(0.3, 0.3, 4)
+	handle.Material = Enum.Material.Wood
+	handle.Color = Color3.fromRGB(120, 85, 50)
+	handle.CanCollide = false
+	handle.Massless = true
+	handle.Parent = tool
+
+	local head = Instance.new("Part")
+	head.Name = "Head"
+	head.Size = Vector3.new(1.3, 0.2, 1.4)
+	head.Material = if def.id == "LaserDrill" then Enum.Material.Neon else Enum.Material.Metal
+	head.Color = def.color
+	head.CanCollide = false
+	head.Massless = true
+	head.CFrame = handle.CFrame * CFrame.new(0, 0, 2.5)
+	head.Parent = tool
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = handle
+	weld.Part1 = head
+	weld.Parent = handle
+	return tool
+end
+
+function DigService.GiveTool(player: Player)
+	local data = DataService.Get(player)
+	if not data then
+		return
+	end
+	local def = Config.ToolsById[data.tool] or Config.Tools[1]
+	local wasEquipped = false
+	for _, container in { player:FindFirstChildOfClass("Backpack"), player.Character } do
+		if container then
+			for _, child in container:GetChildren() do
+				if child:IsA("Tool") and child:GetAttribute("DigTool") then
+					if child.Parent == player.Character then
+						wasEquipped = true
+					end
+					child:Destroy()
+				end
+			end
+		end
+	end
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not backpack then
+		return
+	end
+	local tool = buildTool(def)
+	tool.Parent = backpack
+	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if wasEquipped and humanoid then
+		humanoid:EquipTool(tool)
+	end
+end
+
+----------------------------------------------------------------------
+-- 흙더미
+----------------------------------------------------------------------
+local function rollMoundKind(): string
+	local total = 0
+	for _, kind in Config.Mounds do
+		total += kind.spawnWeight
+	end
+	local roll = math.random() * total
+	for id, kind in Config.Mounds do
+		roll -= kind.spawnWeight
+		if kind.spawnWeight > 0 and roll <= 0 then
+			return id
+		end
+	end
+	return "Dirt"
+end
+
+local function addSparkle(mound: BasePart, color: Color3)
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "Sparkle"
+	emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	emitter.Color = ColorSequence.new(color)
+	emitter.Size = NumberSequence.new(0.5)
+	emitter.Rate = 6
+	emitter.Lifetime = NumberRange.new(0.8, 1.5)
+	emitter.Speed = NumberRange.new(1, 2)
+	emitter.SpreadAngle = Vector2.new(60, 60)
+	emitter.Parent = mound
+	local light = Instance.new("PointLight")
+	light.Color = color
+	light.Range = 8
+	light.Brightness = 1
+	light.Parent = mound
+end
+
+local function setupMound(mound: Part, kindId: string)
+	local kind = Config.Mounds[kindId]
+	mound.Name = kindId
+	mound.Color = kind.color
+	mound:SetAttribute("Kind", kindId)
+	mound:SetAttribute("HP", kind.hp)
+	mound:SetAttribute("MaxHP", kind.hp)
+	for _, child in mound:GetChildren() do
+		if child:IsA("ParticleEmitter") or child:IsA("PointLight") then
+			child:Destroy()
+		end
+	end
+	if kindId == "Sparkle" then
+		addSparkle(mound, Color3.fromRGB(255, 220, 90))
+	end
+end
+
+local function makeMound(position: Vector3, kindId: string): Part
+	local mound = Instance.new("Part")
+	mound.Anchored = true
+	mound.Size = MOUND_SIZE
+	mound.CFrame = CFrame.new(position + Vector3.new(0, 0.3, 0)) * CFrame.Angles(0, math.random() * math.pi * 2, 0)
+	mound.Material = Enum.Material.Ground
+	mound.CanCollide = true
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Parent = mound
+	mound:SetAttribute("Spot", position)
+	setupMound(mound, kindId)
+	mound.Parent = world.field
+	CollectionService:AddTag(mound, TAG)
+	return mound
+end
+
+local function updateMoundSize(mound: BasePart)
+	local hp = mound:GetAttribute("HP") :: number
+	local maxHp = mound:GetAttribute("MaxHP") :: number
+	local ratio = 0.35 + 0.65 * math.clamp(hp / maxHp, 0, 1)
+	local full = if mound:GetAttribute("Kind") == "Meteor" then Vector3.one * METEOR_SIZE else MOUND_SIZE
+	mound.Size = Vector3.new(full.X * (0.7 + 0.3 * ratio), full.Y * ratio, full.Z * (0.7 + 0.3 * ratio))
+end
+
+local function hideMound(mound: BasePart)
+	mound.Transparency = 1
+	mound.CanCollide = false
+	mound.CanQuery = false
+	for _, child in mound:GetChildren() do
+		if child:IsA("ParticleEmitter") then
+			child.Enabled = false
+		elseif child:IsA("PointLight") then
+			child.Enabled = false
+		end
+	end
+end
+
+local function respawnMound(mound: Part)
+	setupMound(mound, rollMoundKind())
+	mound.Size = Vector3.new(MOUND_SIZE.X, 0.2, MOUND_SIZE.Z)
+	mound.Transparency = 0
+	mound.CanCollide = true
+	mound.CanQuery = true
+	TweenService:Create(mound, TweenInfo.new(0.6, Enum.EasingStyle.Back), { Size = MOUND_SIZE }):Play()
+end
+
+----------------------------------------------------------------------
+-- 보상
+----------------------------------------------------------------------
+local function reward(player: Player, data: any, kind: Config.MoundKind, position: Vector3)
+	local passes = Passes.Get(player)
+	local tool = Config.ToolsById[data.tool] or Config.Tools[1]
+	local coins = math.floor(kind.coins * (1 + tool.power * 0.25))
+	data.coins += coins
+	data.stats.dug += 1
+
+	local result: { [string]: any } = { kind = "Dig", coins = coins, position = position }
+
+	if math.random() < kind.pieceChance then
+		local luck = Economy.GetLuck(data, passes, kind.luck)
+		local speciesId, pieceIndex = Economy.RollPiece(luck, kind.cosmicChance)
+		local owned = data.pieces[speciesId]
+		if not owned then
+			owned = {}
+			data.pieces[speciesId] = owned
+		end
+		local key = tostring(pieceIndex)
+		local before = owned[key] or 0
+		owned[key] = before + 1
+		data.stats.found += 1
+
+		result.speciesId = speciesId
+		result.pieceIndex = pieceIndex
+		result.isNew = before == 0
+		result.complete = Economy.HasAllPieces(data, speciesId)
+
+		local species = Config.SpeciesById[speciesId]
+		local rarity = Config.RarityById[species.rarity]
+		if rarity.tier >= Config.AnnounceTier then
+			local pieceName = Config.GetPieces(species)[pieceIndex]
+			Net.Announce(string.format("🦴 %s님이 [%s] %s %s 조각을 발견했어요!", player.DisplayName, rarity.name, species.name, pieceName), rarity.color)
+		end
+	end
+
+	Net.Notify:FireClient(player, result)
+	Net.MarkDirty(player)
+end
+
+----------------------------------------------------------------------
+-- 삽질 요청 처리
+----------------------------------------------------------------------
+local function onDig(player: Player, mound: any)
+	if typeof(mound) ~= "Instance" or not mound:IsA("BasePart") or not CollectionService:HasTag(mound, TAG) then
+		return
+	end
+	local data = DataService.Get(player)
+	if not data then
+		return
+	end
+	local now = os.clock()
+	local cooldown = Economy.GetDigCooldown(data, Passes.Get(player))
+	if now - (lastDig[player] or 0) < cooldown * 0.85 then
+		return
+	end
+
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not root then
+		return
+	end
+	if (root.Position - mound.Position).Magnitude > Config.DigRange then
+		return
+	end
+	local held = character:FindFirstChildOfClass("Tool")
+	if not held or not held:GetAttribute("DigTool") then
+		return
+	end
+	local hp = mound:GetAttribute("HP") :: number
+	if not hp or hp <= 0 then
+		return
+	end
+	lastDig[player] = now
+
+	local tool = Config.ToolsById[data.tool] or Config.Tools[1]
+	hp -= tool.power
+	mound:SetAttribute("HP", hp)
+	local kindId = mound:GetAttribute("Kind") :: string
+	local kind = Config.Mounds[kindId]
+	Net.Effect:FireAllClients("Dig", mound.Position, kind.color, hp <= 0)
+
+	if hp > 0 then
+		updateMoundSize(mound)
+		return
+	end
+
+	hideMound(mound)
+	reward(player, data, kind, mound.Position)
+	if kindId == "Meteor" then
+		task.delay(1, function()
+			mound:Destroy()
+		end)
+	else
+		task.delay(Config.MoundRespawnTime, function()
+			if mound.Parent then
+				respawnMound(mound :: Part)
+			end
+		end)
+	end
+end
+
+----------------------------------------------------------------------
+-- 운석 이벤트
+----------------------------------------------------------------------
+local meteors = {}
+
+local function spawnMeteor()
+	local ring = world.meteorRing
+	local angle = math.random() * math.pi * 2
+	local radius = ring.inner + math.random() * (ring.outer - ring.inner)
+	local ground = Vector3.new(math.cos(angle) * radius, METEOR_SIZE * 0.35, math.sin(angle) * radius)
+
+	local meteor = Instance.new("Part")
+	meteor.Shape = Enum.PartType.Ball
+	meteor.Anchored = true
+	meteor.Size = Vector3.one * METEOR_SIZE
+	meteor.Material = Enum.Material.Basalt
+	meteor.CanQuery = false
+	meteor.CanCollide = false
+	meteor.Position = ground + Vector3.new(30, 200, 20)
+	meteor:SetAttribute("Spot", ground)
+	setupMound(meteor, "Meteor")
+	addSparkle(meteor, Color3.fromRGB(180, 90, 255))
+	local fire = Instance.new("Fire")
+	fire.Color = Color3.fromRGB(170, 90, 255)
+	fire.SecondaryColor = Color3.fromRGB(80, 200, 255)
+	fire.Size = 8
+	fire.Parent = meteor
+	meteor.Parent = world.field
+	table.insert(meteors, meteor)
+
+	local tween = TweenService:Create(meteor, TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = ground })
+	tween:Play()
+	tween.Completed:Wait()
+	if not meteor.Parent then
+		return
+	end
+	fire.Size = 3
+	local boom = Instance.new("Explosion")
+	boom.BlastPressure = 0
+	boom.BlastRadius = 0
+	boom.DestroyJointRadiusPercent = 0
+	boom.Position = ground
+	boom.Parent = workspace
+	meteor.CanQuery = true
+	meteor.CanCollide = true
+	CollectionService:AddTag(meteor, TAG)
+end
+
+local function meteorLoop()
+	local first = true
+	while true do
+		local waitTime = Config.MeteorInterval
+		if first and RunService:IsStudio() then
+			waitTime = 45 -- Studio 테스트 때는 빨리 시작
+		end
+		first = false
+		ReplicatedStorage:SetAttribute("MeteorActive", false)
+		ReplicatedStorage:SetAttribute("NextMeteorAt", workspace:GetServerTimeNow() + waitTime)
+		task.wait(waitTime)
+
+		ReplicatedStorage:SetAttribute("MeteorActive", true)
+		ReplicatedStorage:SetAttribute("MeteorEndsAt", workspace:GetServerTimeNow() + Config.MeteorDuration)
+		Net.Announce("☄️ 운석이 떨어지고 있어요! 발굴장 주변에서 우주 화석을 찾아보세요!", Color3.fromRGB(180, 120, 255))
+		for _ = 1, Config.MeteorCount do
+			task.delay(math.random() * 8, spawnMeteor)
+		end
+		task.wait(Config.MeteorDuration)
+
+		for _, meteor in meteors do
+			if meteor.Parent then
+				meteor:Destroy()
+			end
+		end
+		table.clear(meteors)
+		Net.Announce("운석 낙하가 끝났어요. 다음 운석을 기다려 주세요!", Color3.fromRGB(200, 200, 200))
+	end
+end
+
+----------------------------------------------------------------------
+function DigService.Init(builtWorld: any)
+	world = builtWorld
+	for _, spot in world.spots do
+		makeMound(spot, rollMoundKind())
+	end
+
+	Net.Dig.OnServerEvent:Connect(onDig)
+
+	local function onCharacter(player: Player)
+		-- 데이터가 준비될 때까지 기다렸다가 도구 지급
+		task.spawn(function()
+			local started = os.clock()
+			while not DataService.Get(player) and player.Parent and os.clock() - started < 30 do
+				task.wait(0.2)
+			end
+			if player.Parent then
+				DigService.GiveTool(player)
+			end
+		end)
+	end
+	local function onPlayer(player: Player)
+		player.CharacterAdded:Connect(function()
+			onCharacter(player)
+		end)
+		if player.Character then
+			onCharacter(player)
+		end
+	end
+	Players.PlayerAdded:Connect(onPlayer)
+	for _, player in Players:GetPlayers() do
+		onPlayer(player)
+	end
+	Players.PlayerRemoving:Connect(function(player)
+		lastDig[player] = nil
+	end)
+
+	task.spawn(meteorLoop)
+end
+
+return DigService
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">FossilModel</string><string name="Source"><![CDATA[-- 완성 화석의 3D 뼈대 모형을 파트로 만들어 줌 (에셋 없이 동작)
+-- 모형은 로컬 +X 방향이 머리, 원점은 전시대 윗면 중앙입니다.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local Util = require(ReplicatedStorage.Shared.Util)
+
+local FossilModel = {}
+
+local BONE = Color3.fromRGB(236, 226, 200)
+
+type Style = { color: Color3, material: Enum.Material, transparency: number }
+
+local function styleFor(rarityId: string): Style
+	if rarityId == "Mythic" then
+		return { color = Color3.fromRGB(255, 150, 190), material = Enum.Material.Glass, transparency = 0.15 }
+	elseif rarityId == "Cosmic" then
+		return { color = Color3.fromRGB(120, 255, 240), material = Enum.Material.Neon, transparency = 0 }
+	elseif rarityId == "Legendary" then
+		return { color = Color3.fromRGB(245, 225, 170), material = Enum.Material.SmoothPlastic, transparency = 0 }
+	end
+	return { color = BONE, material = Enum.Material.SmoothPlastic, transparency = 0 }
+end
+
+type Builder = {
+	model: Model,
+	base: CFrame,
+	style: Style,
+}
+
+local function newPart(b: Builder, shape: Enum.PartType?): Part
+	local p = Instance.new("Part")
+	if shape then
+		p.Shape = shape
+	end
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = true
+	p.Color = b.style.color
+	p.Material = b.style.material
+	p.Transparency = b.style.transparency
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Parent = b.model
+	return p
+end
+
+-- a 에서 c 까지 이어지는 원기둥 뼈
+local function bone(b: Builder, a: Vector3, c: Vector3, thick: number)
+	local wa = b.base:PointToWorldSpace(a)
+	local wc = b.base:PointToWorldSpace(c)
+	local dir = wc - wa
+	local len = dir.Magnitude
+	if len < 0.05 then
+		return
+	end
+	local up = b.base:VectorToWorldSpace(Vector3.yAxis)
+	if math.abs(dir.Unit:Dot(up)) > 0.98 then
+		up = b.base:VectorToWorldSpace(Vector3.xAxis)
+	end
+	local p = newPart(b, Enum.PartType.Cylinder)
+	p.Size = Vector3.new(len + thick * 0.5, thick, thick)
+	p.CFrame = CFrame.lookAt((wa + wc) / 2, wc, up) * CFrame.Angles(0, math.pi / 2, 0)
+end
+
+local function ball(b: Builder, at: Vector3, size: number)
+	local p = newPart(b, Enum.PartType.Ball)
+	p.Size = Vector3.new(size, size, size)
+	p.CFrame = b.base * CFrame.new(at)
+end
+
+local function block(b: Builder, at: Vector3, size: Vector3, rot: CFrame?)
+	local p = newPart(b)
+	p.Size = size
+	p.CFrame = b.base * CFrame.new(at) * (rot or CFrame.identity)
+end
+
+local function stand(b: Builder, height: number)
+	local p = newPart(b, Enum.PartType.Cylinder)
+	p.Color = Color3.fromRGB(60, 60, 65)
+	p.Material = Enum.Material.Metal
+	p.Transparency = 0
+	p.Size = Vector3.new(height, 0.3, 0.3)
+	p.CFrame = b.base * CFrame.new(0, height / 2, 0) * CFrame.Angles(0, 0, math.pi / 2)
+end
+
+local function ribs(b: Builder, from: Vector3, to: Vector3, count: number, depth: number, width: number, thick: number)
+	for i = 1, count do
+		local t = i / (count + 1)
+		local p = from:Lerp(to, t)
+		local d = depth * (1 - math.abs(t - 0.5) * 0.8)
+		for _, side in { -1, 1 } do
+			local mid = p + Vector3.new(0, -d * 0.45, side * width)
+			bone(b, p, mid, thick)
+			bone(b, mid, p + Vector3.new(0, -d, side * width * 0.4), thick)
+		end
+	end
+end
+
+local function skull(b: Builder, at: Vector3, s: number, look: Config.Look)
+	local h = (look.head or 1) * s
+	block(b, at, Vector3.new(1.3 * h, 0.8 * h, 0.8 * h))
+	-- 아래턱
+	block(b, at + Vector3.new(0.15 * h, -0.5 * h, 0), Vector3.new(1.1 * h, 0.22 * h, 0.6 * h), CFrame.Angles(0, 0, math.rad(-8)))
+	-- 눈구멍
+	for _, side in { -1, 1 } do
+		local eye = newPart(b, Enum.PartType.Ball)
+		eye.Color = Color3.fromRGB(40, 35, 30)
+		eye.Material = Enum.Material.SmoothPlastic
+		eye.Transparency = 0
+		eye.Size = Vector3.new(0.28, 0.28, 0.28) * h
+		eye.CFrame = b.base * CFrame.new(at + Vector3.new(0.1 * h, 0.15 * h, side * 0.38 * h))
+	end
+	if look.horns then
+		for _, side in { -1, 1 } do
+			bone(b, at + Vector3.new(0.1 * h, 0.35 * h, side * 0.3 * h), at + Vector3.new(0.7 * h, 1.0 * h, side * 0.45 * h), 0.14 * h)
+		end
+		bone(b, at + Vector3.new(0.6 * h, 0.3 * h, 0), at + Vector3.new(0.9 * h, 0.7 * h, 0), 0.12 * h)
+	end
+	if look.tusks then
+		for _, side in { -1, 1 } do
+			local root = at + Vector3.new(0.5 * h, -0.3 * h, side * 0.3 * h)
+			local mid = root + Vector3.new(0.6 * h, -0.8 * h, side * 0.2 * h)
+			bone(b, root, mid, 0.18 * h)
+			bone(b, mid, mid + Vector3.new(0.6 * h, 0.5 * h, side * 0.1 * h), 0.15 * h)
+		end
+	end
+end
+
+local function quadruped(b: Builder, s: number, look: Config.Look)
+	local shoulder = Vector3.new(1.6 * s, 2.6 * s, 0)
+	local hip = Vector3.new(-1.6 * s, 2.5 * s, 0)
+	bone(b, shoulder, hip, 0.42 * s)
+	ribs(b, hip, shoulder, 5, 1.2 * s, 0.6 * s, 0.14 * s)
+	for _, side in { -0.6, 0.6 } do
+		local z = side * s
+		bone(b, shoulder + Vector3.new(0, 0, z), Vector3.new(1.8 * s, 1.2 * s, z), 0.32 * s)
+		bone(b, Vector3.new(1.8 * s, 1.2 * s, z), Vector3.new(1.7 * s, 0, z), 0.28 * s)
+		bone(b, hip + Vector3.new(0, 0, z), Vector3.new(-1.3 * s, 1.2 * s, z), 0.36 * s)
+		bone(b, Vector3.new(-1.3 * s, 1.2 * s, z), Vector3.new(-1.6 * s, 0, z), 0.3 * s)
+	end
+	local neck = math.clamp(look.neck or 0.6, 0.2, 2.4)
+	local neckDir = Vector3.new(1, neck * 0.9, 0).Unit
+	local neckEnd = shoulder + neckDir * (0.8 + neck * 1.6) * s
+	bone(b, shoulder, neckEnd, 0.3 * s)
+	skull(b, neckEnd + Vector3.new(0.6 * s * (look.head or 1), 0, 0), s, look)
+
+	local tail = (look.tail or 1) * s
+	local tailMid = hip + Vector3.new(-1.3 * tail, -0.4 * s, 0)
+	local tailEnd = hip + Vector3.new(-2.6 * tail, -1.0 * s, 0)
+	bone(b, hip, tailMid, 0.3 * s)
+	bone(b, tailMid, tailEnd, 0.18 * s)
+	if look.club then
+		ball(b, tailEnd, 0.8 * s)
+	end
+	if look.plates then
+		local plateStart = hip:Lerp(tailMid, 0.5)
+		for i = 0, 5 do
+			local p = plateStart:Lerp(shoulder, i / 6)
+			block(b, p + Vector3.new(0, 0.55 * s, 0), Vector3.new(0.7 * s, 0.7 * s, 0.12 * s), CFrame.Angles(0, 0, math.rad(45)))
+		end
+	end
+	if look.sail then
+		block(b, (shoulder + hip) / 2 + Vector3.new(0, 1.0 * s, 0), Vector3.new(3.0 * s, 1.6 * s, 0.1 * s))
+	end
+end
+
+local function biped(b: Builder, s: number, look: Config.Look)
+	local hip = Vector3.new(-0.3 * s, 3.0 * s, 0)
+	local chest = hip + Vector3.new(1.6 * s, 0.6 * s, 0)
+	bone(b, hip, chest, 0.42 * s)
+	ribs(b, hip, chest, 4, 1.1 * s, 0.5 * s, 0.13 * s)
+	for _, side in { -0.5, 0.5 } do
+		local z = side * s
+		local knee = hip + Vector3.new(0.6 * s, -1.5 * s, z)
+		local ankle = Vector3.new(-0.3 * s, 0.4 * s, z)
+		bone(b, hip + Vector3.new(0, 0, z), knee, 0.4 * s)
+		bone(b, knee, ankle, 0.3 * s)
+		bone(b, ankle, Vector3.new(0.4 * s, 0.05 * s, z), 0.22 * s)
+		local shoulder = chest + Vector3.new(0, -0.3 * s, z * 0.8)
+		bone(b, shoulder, shoulder + Vector3.new(0.4 * s, -0.7 * s, 0), 0.14 * s)
+		bone(b, shoulder + Vector3.new(0.4 * s, -0.7 * s, 0), shoulder + Vector3.new(0.75 * s, -0.6 * s, 0), 0.11 * s)
+	end
+	local neckEnd = chest + Vector3.new(0.5 * s, 0.6 * s, 0)
+	bone(b, chest, neckEnd, 0.3 * s)
+	skull(b, neckEnd + Vector3.new(0.65 * s * (look.head or 1), 0.1 * s, 0), s, look)
+
+	local tail = (look.tail or 1) * s
+	local tailMid = hip + Vector3.new(-1.5 * tail, -0.15 * s, 0)
+	local tailEnd = hip + Vector3.new(-3.0 * tail, -0.6 * s, 0)
+	bone(b, hip, tailMid, 0.32 * s)
+	bone(b, tailMid, tailEnd, 0.18 * s)
+	if look.sail then
+		block(b, (hip + chest) / 2 + Vector3.new(0, 1.0 * s, 0), Vector3.new(2.0 * s, 1.8 * s, 0.1 * s), CFrame.Angles(0, 0, math.rad(20)))
+	end
+end
+
+local function flyer(b: Builder, s: number, look: Config.Look)
+	stand(b, 2.8 * s)
+	local back = Vector3.new(-0.8 * s, 3.0 * s, 0)
+	local front = Vector3.new(0.8 * s, 3.25 * s, 0)
+	bone(b, back, front, 0.5 * s)
+	for _, side in { -1, 1 } do
+		local root = front + Vector3.new(-0.3 * s, 0, side * 0.2 * s)
+		local elbow = Vector3.new(0.3 * s, 3.9 * s, side * 1.8 * s)
+		local tip = Vector3.new(-0.7 * s, 3.5 * s, side * 3.4 * s)
+		bone(b, root, elbow, 0.22 * s)
+		bone(b, elbow, tip, 0.16 * s)
+		bone(b, tip, back + Vector3.new(-0.2 * s, 0, side * 0.3 * s), 0.08 * s)
+		bone(b, elbow, back + Vector3.new(0, 0, side * 0.3 * s), 0.08 * s)
+		bone(b, back + Vector3.new(0, 0, side * 0.25 * s), back + Vector3.new(-0.2 * s, -0.9 * s, side * 0.35 * s), 0.12 * s)
+	end
+	local neckEnd = front + Vector3.new(0.6 * s, 0.4 * s, 0)
+	bone(b, front, neckEnd, 0.22 * s)
+	local head = neckEnd + Vector3.new(0.7 * s, 0.05 * s, 0)
+	block(b, head, Vector3.new(1.0, 0.5, 0.45) * s)
+	block(b, head + Vector3.new(0.9 * s, -0.08 * s, 0), Vector3.new(1.2, 0.18, 0.2) * s) -- 부리
+	if look.horns then
+		bone(b, head + Vector3.new(-0.3 * s, 0.2 * s, 0), head + Vector3.new(-1.1 * s, 0.9 * s, 0), 0.14 * s)
+	else
+		bone(b, head + Vector3.new(-0.3 * s, 0.2 * s, 0), head + Vector3.new(-0.9 * s, 0.5 * s, 0), 0.12 * s)
+	end
+	bone(b, back, back + Vector3.new(-0.7 * s, -0.3 * s, 0), 0.1 * s)
+end
+
+local function swimmer(b: Builder, s: number, look: Config.Look)
+	stand(b, 2.4 * s)
+	local tailBase = Vector3.new(-1.9 * s, 2.6 * s, 0)
+	local chest = Vector3.new(1.3 * s, 2.7 * s, 0)
+	bone(b, tailBase, chest, 0.45 * s)
+	ribs(b, tailBase:Lerp(chest, 0.15), chest, 5, 1.0 * s, 0.55 * s, 0.13 * s)
+	local neck = (look.neck or 0.5) * s
+	local neckEnd = chest + Vector3.new(0.4 * s + neck * 1.5, 0.1 * s, 0)
+	bone(b, chest, neckEnd, 0.32 * s)
+	skull(b, neckEnd + Vector3.new(0.6 * s * (look.head or 1), 0, 0), s, look)
+	for _, side in { -1, 1 } do
+		local f = chest + Vector3.new(-0.3 * s, -0.25 * s, side * 0.3 * s)
+		bone(b, f, f + Vector3.new(0.5 * s, -0.5 * s, side * 1.4 * s), 0.2 * s)
+		local r = tailBase + Vector3.new(0.7 * s, -0.25 * s, side * 0.3 * s)
+		bone(b, r, r + Vector3.new(-0.3 * s, -0.4 * s, side * 1.2 * s), 0.18 * s)
+	end
+	local tailEnd = tailBase + Vector3.new(-1.4 * s, 0.05 * s, 0)
+	bone(b, tailBase, tailEnd, 0.25 * s)
+	bone(b, tailEnd, tailEnd + Vector3.new(-0.6 * s, 0.9 * s, 0), 0.16 * s)
+	bone(b, tailEnd, tailEnd + Vector3.new(-0.6 * s, -0.7 * s, 0), 0.16 * s)
+end
+
+local BUILDERS = {
+	Quadruped = quadruped,
+	Biped = biped,
+	Flyer = flyer,
+	Swimmer = swimmer,
+}
+
+-- base: 전시대 윗면 중앙 CFrame
+function FossilModel.Build(speciesId: string, base: CFrame): Model?
+	local species = Config.SpeciesById[speciesId]
+	if not species then
+		return nil
+	end
+	local rarity = Config.RarityById[species.rarity]
+	local model = Instance.new("Model")
+	model.Name = species.id
+	local b: Builder = { model = model, base = base, style = styleFor(species.rarity) }
+	local s = species.look.scale or 1
+	BUILDERS[species.shape](b, s, species.look)
+
+	-- 이름표
+	local anchor = Instance.new("Part")
+	anchor.Name = "LabelAnchor"
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanQuery = false
+	anchor.CanTouch = false
+	anchor.Transparency = 1
+	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+	anchor.CFrame = base * CFrame.new(0, 6.2 * s, 0)
+	anchor.Parent = model
+
+	local gui = Instance.new("BillboardGui")
+	gui.Size = UDim2.fromOffset(200, 50)
+	gui.MaxDistance = 70
+	gui.AlwaysOnTop = false
+	gui.Parent = anchor
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.fromScale(1, 0.6)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Font = Enum.Font.FredokaOne
+	nameLabel.TextScaled = true
+	nameLabel.TextColor3 = rarity.color
+	nameLabel.TextStrokeTransparency = 0.2
+	nameLabel.Text = species.name
+	nameLabel.Parent = gui
+	local info = Instance.new("TextLabel")
+	info.Size = UDim2.fromScale(1, 0.4)
+	info.Position = UDim2.fromScale(0, 0.6)
+	info.BackgroundTransparency = 1
+	info.Font = Enum.Font.GothamBold
+	info.TextScaled = true
+	info.TextColor3 = Color3.new(1, 1, 1)
+	info.TextStrokeTransparency = 0.3
+	info.Text = string.format("%s · +%s/초", rarity.name, Util.FormatNumber(rarity.income))
+	info.Parent = gui
+
+	if rarity.tier >= 5 then
+		local light = Instance.new("PointLight")
+		light.Color = rarity.color
+		light.Range = 10
+		light.Brightness = 1.5
+		light.Parent = anchor
+		local sparkle = Instance.new("ParticleEmitter")
+		sparkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		sparkle.Color = ColorSequence.new(rarity.color)
+		sparkle.Size = NumberSequence.new(0.3)
+		sparkle.Rate = 3
+		sparkle.Lifetime = NumberRange.new(1, 2)
+		sparkle.Speed = NumberRange.new(0.5, 1)
+		sparkle.SpreadAngle = Vector2.new(180, 180)
+		sparkle.Parent = anchor
+	end
+
+	return model
+end
+
+return FossilModel
+]]></string></Properties></Item><Item class="Script" referent="RBX00000009"><Properties><string name="Name">Main</string><string name="Source"><![CDATA[-- 서버 시작점
+
+local Server = script.Parent
+local WorldBuilder = require(Server.WorldBuilder)
+local DataService = require(Server.DataService)
+local Passes = require(Server.Passes)
+local Net = require(Server.Net)
+local DigService = require(Server.DigService)
+local MuseumService = require(Server.MuseumService)
+local ShopService = require(Server.ShopService)
+
+local world = WorldBuilder.Build()
+
+Passes.Init()
+Passes.Changed:Connect(function(player)
+	Net.MarkDirty(player)
+end)
+
+-- 순서 중요: 데이터 로드 이벤트를 받는 서비스들을 먼저 연결
+MuseumService.Init(world)
+DigService.Init(world)
+ShopService.Init()
+DataService.Init()
+
+print("[FossilMuseum] 서버 준비 완료")
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000A"><Properties><string name="Name">MuseumService</string><string name="Source"><![CDATA[-- 박물관: 부지 배정, 화석 전시, 수입, 좋아요, 조립/판매
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local Economy = require(ReplicatedStorage.Shared.Economy)
+local Util = require(ReplicatedStorage.Shared.Util)
+local DataService = require(script.Parent.DataService)
+local Passes = require(script.Parent.Passes)
+local Net = require(script.Parent.Net)
+local FossilModel = require(script.Parent.FossilModel)
+
+local MuseumService = {}
+
+local world: any = nil
+local playerPlot: { [Player]: Model } = {}
+local signatures: { [Player]: string } = {}
+local carry: { [Player]: number } = {}
+
+local LOCKED_COLOR = Color3.fromRGB(120, 115, 110)
+local OPEN_COLOR = Color3.fromRGB(200, 195, 185)
+
+local function setText(part: Instance?, guiChildName: string, text: string)
+	if not part then
+		return
+	end
+	for _, gui in part:GetChildren() do
+		if gui:IsA("SurfaceGui") then
+			local label = gui:FindFirstChild(guiChildName)
+			if label and label:IsA("TextLabel") then
+				label.Text = text
+			end
+		end
+	end
+end
+
+local function updateSign(plot: Model, player: Player?, data: any?)
+	if player and data then
+		setText(plot:FindFirstChild("Sign"), "Title", player.DisplayName .. "의 박물관")
+		setText(plot:FindFirstChild("LikeStand"), "Likes", "❤️\n" .. Util.FormatNumber(data.likes))
+	else
+		setText(plot:FindFirstChild("Sign"), "Title", "빈 박물관")
+		setText(plot:FindFirstChild("LikeStand"), "Likes", "❤️")
+	end
+end
+
+local function clearDisplays(plot: Model)
+	local displays = plot:FindFirstChild("Displays")
+	if displays then
+		displays:ClearAllChildren()
+	end
+end
+
+local function refreshDisplay(player: Player)
+	local plot = playerPlot[player]
+	local data = DataService.Get(player)
+	if not plot or not data then
+		return
+	end
+	local list = Economy.GetDisplayed(data)
+	local signature = data.slots .. "|" .. table.concat(list, ",")
+	updateSign(plot, player, data)
+	if signatures[player] == signature then
+		return
+	end
+	signatures[player] = signature
+
+	clearDisplays(plot)
+	local pedestals = plot:FindFirstChild("Pedestals") :: Folder
+	local displays = plot:FindFirstChild("Displays") :: Folder
+	for i, ped in pedestals:GetChildren() do
+		local index = tonumber(ped.Name) or i
+		local p = ped :: BasePart
+		local speciesId = list[index]
+		if index > data.slots then
+			p.Transparency = 0.7
+			p.Color = LOCKED_COLOR
+		elseif speciesId then
+			p.Transparency = 0
+			p.Color = Config.RarityById[Config.SpeciesById[speciesId].rarity].color
+		else
+			p.Transparency = 0
+			p.Color = OPEN_COLOR
+		end
+		if speciesId and index <= data.slots then
+			local base = p.CFrame * CFrame.new(0, p.Size.Y / 2, 0)
+			local model = FossilModel.Build(speciesId, base)
+			if model then
+				model.Parent = displays
+			end
+		end
+	end
+end
+
+local function assignPlot(player: Player)
+	for _, plot in world.plots do
+		if plot:GetAttribute("OwnerUserId") == 0 then
+			plot:SetAttribute("OwnerUserId", player.UserId)
+			playerPlot[player] = plot
+			signatures[player] = nil
+			refreshDisplay(player)
+			return
+		end
+	end
+	Net.Tell(player, "빈 박물관 부지가 없어요. 서버 최대 인원을 8명으로 설정해 주세요.")
+end
+
+local function releasePlot(player: Player)
+	local plot = playerPlot[player]
+	if plot then
+		clearDisplays(plot)
+		updateSign(plot)
+		plot:SetAttribute("OwnerUserId", 0)
+		local pedestals = plot:FindFirstChild("Pedestals")
+		if pedestals then
+			for _, ped in pedestals:GetChildren() do
+				(ped :: BasePart).Transparency = 0.6;
+				(ped :: BasePart).Color = OPEN_COLOR
+			end
+		end
+	end
+	playerPlot[player] = nil
+	signatures[player] = nil
+	carry[player] = nil
+end
+
+local function countCompleted(data: any): number
+	local total = 0
+	for _, count in data.museum do
+		total += count
+	end
+	return total
+end
+
+local function setupLeaderstats(player: Player, data: any)
+	local stats = Instance.new("Folder")
+	stats.Name = "leaderstats"
+	local coins = Instance.new("IntValue")
+	coins.Name = "코인"
+	coins.Value = math.floor(data.coins)
+	coins.Parent = stats
+	local fossils = Instance.new("IntValue")
+	fossils.Name = "화석"
+	fossils.Value = countCompleted(data)
+	fossils.Parent = stats
+	stats.Parent = player
+end
+
+----------------------------------------------------------------------
+-- 좋아요
+----------------------------------------------------------------------
+local function onLike(liker: Player, plot: Model)
+	local ownerId = plot:GetAttribute("OwnerUserId") :: number
+	if not ownerId or ownerId == 0 then
+		return
+	end
+	if ownerId == liker.UserId then
+		Net.Tell(liker, "내 박물관에는 좋아요를 누를 수 없어요 😅")
+		return
+	end
+	local owner = Players:GetPlayerByUserId(ownerId)
+	local likerData = DataService.Get(liker)
+	local ownerData = owner and DataService.Get(owner)
+	if not owner or not likerData or not ownerData then
+		return
+	end
+	local key = tostring(ownerId)
+	local today = DataService.Today()
+	if likerData.likedGiven[key] == today then
+		Net.Tell(liker, "오늘은 이미 이 박물관에 좋아요를 눌렀어요. 내일 또 와주세요!")
+		return
+	end
+	likerData.likedGiven[key] = today
+	ownerData.likes += 1
+	Net.Tell(liker, owner.DisplayName .. "님의 박물관에 좋아요를 눌렀어요 ❤️", Color3.fromRGB(255, 130, 160))
+	Net.Tell(owner, liker.DisplayName .. "님이 내 박물관에 좋아요를 눌렀어요! ❤️ (수입 +1%)", Color3.fromRGB(255, 130, 160))
+	Net.MarkDirty(owner)
+end
+
+----------------------------------------------------------------------
+-- 버튼 요청
+----------------------------------------------------------------------
+Net.Handle("Assemble", function(player, speciesId)
+	local data = DataService.Get(player)
+	if type(speciesId) ~= "string" or not Economy.HasAllPieces(data, speciesId) then
+		return false, "조각이 모자라요"
+	end
+	local species = Config.SpeciesById[speciesId]
+	local owned = data.pieces[speciesId]
+	for i = 1, #Config.GetPieces(species) do
+		local key = tostring(i)
+		owned[key] -= 1
+		if owned[key] <= 0 then
+			owned[key] = nil
+		end
+	end
+	data.museum[speciesId] = (data.museum[speciesId] or 0) + 1
+	local rarity = Config.RarityById[species.rarity]
+	if rarity.tier >= Config.AnnounceTier then
+		Net.Announce(string.format("🏛️ %s님이 [%s] %s 화석을 완성했어요!", player.DisplayName, rarity.name, species.name), rarity.color)
+	end
+	Net.MarkDirty(player)
+	return true, species.name .. " 화석 완성! 박물관에 전시했어요 🦖"
+end)
+
+Net.Handle("SellDuplicates", function(player)
+	local data = DataService.Get(player)
+	local value = Economy.GetDuplicateValue(data)
+	if value <= 0 then
+		return false, "판매할 중복 조각이 없어요"
+	end
+	for _, owned in data.pieces do
+		for key, count in owned do
+			if count > 1 then
+				owned[key] = 1
+			end
+		end
+	end
+	data.coins += value
+	Net.MarkDirty(player)
+	return true, "중복 조각을 팔아서 " .. Util.FormatNumber(value) .. " 코인을 받았어요"
+end)
+
+Net.Handle("Teleport", function(player, target)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not root then
+		return false, nil
+	end
+	if target == "Museum" then
+		local plot = playerPlot[player]
+		local entry = plot and plot:FindFirstChild("Entry") :: BasePart?
+		if not entry then
+			return false, "박물관이 없어요"
+		end
+		-- 입구에서 안쪽(전시대 방향)을 바라보도록
+		root.CFrame = entry.CFrame * CFrame.Angles(0, math.pi, 0) + Vector3.new(0, 2, 0)
+		return true, nil
+	elseif target == "Field" then
+		root.CFrame = world.fieldSpawn
+		return true, nil
+	end
+	return false, nil
+end)
+
+----------------------------------------------------------------------
+function MuseumService.Init(builtWorld: any)
+	world = builtWorld
+
+	for _, plot in world.plots do
+		local stand = plot:FindFirstChild("LikeStand")
+		local prompt = stand and stand:FindFirstChild("LikePrompt") :: ProximityPrompt?
+		if prompt then
+			prompt.Triggered:Connect(function(liker)
+				onLike(liker, plot)
+			end)
+		end
+	end
+
+	DataService.Loaded:Connect(function(player: Player, data: any, offlineSeconds: number)
+		setupLeaderstats(player, data)
+		assignPlot(player)
+		if offlineSeconds > 60 then
+			local earned = math.floor(Economy.GetIncome(data, Passes.Get(player)) * Config.OfflineRate * offlineSeconds)
+			if earned > 0 then
+				data.coins += earned
+				task.delay(3, function()
+					if player.Parent then
+						Net.Notify:FireClient(player, { kind = "Offline", coins = earned, seconds = offlineSeconds })
+					end
+				end)
+			end
+		end
+		Net.MarkDirty(player)
+	end)
+
+	Net.Changed:Connect(function(player: Player)
+		refreshDisplay(player)
+		local data = DataService.Get(player)
+		local stats = player:FindFirstChild("leaderstats")
+		local fossils = stats and stats:FindFirstChild("화석") :: IntValue?
+		if data and fossils then
+			fossils.Value = countCompleted(data)
+		end
+	end)
+
+	Players.PlayerRemoving:Connect(releasePlot)
+
+	-- 박물관 수입 (1초마다)
+	task.spawn(function()
+		while true do
+			task.wait(1)
+			for player, _ in playerPlot do
+				local data = DataService.Get(player)
+				if data then
+					local income = Economy.GetIncome(data, Passes.Get(player))
+					local total = (carry[player] or 0) + income
+					local whole = math.floor(total)
+					carry[player] = total - whole
+					if whole > 0 then
+						data.coins += whole
+						Net.UpdateCoins(player)
+					end
+				end
+			end
+		end
+	end)
+end
+
+return MuseumService
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000B"><Properties><string name="Name">Net</string><string name="Source"><![CDATA[-- 클라이언트와 통신: 리모트 생성, 알림, 데이터 동기화
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Economy = require(ReplicatedStorage.Shared.Economy)
+local DataService = require(script.Parent.DataService)
+local Passes = require(script.Parent.Passes)
+
+local Net = {}
+
+local folder = Instance.new("Folder")
+folder.Name = "Remotes"
+
+local function make(className: string, name: string): any
+	local remote = Instance.new(className)
+	remote.Name = name
+	remote.Parent = folder
+	return remote
+end
+
+Net.Dig = make("RemoteEvent", "Dig") :: RemoteEvent -- 클라 → 서버: 흙더미 파기
+Net.Notify = make("RemoteEvent", "Notify") :: RemoteEvent -- 서버 → 클라: 알림
+Net.Sync = make("RemoteEvent", "Sync") :: RemoteEvent -- 서버 → 클라: 데이터 전체
+Net.Effect = make("RemoteEvent", "Effect") :: RemoteEvent -- 서버 → 클라: 연출
+Net.Action = make("RemoteFunction", "Action") :: RemoteFunction -- 클라 → 서버: 버튼 요청
+
+folder.Parent = ReplicatedStorage
+
+local changedEvent = Instance.new("BindableEvent")
+Net.Changed = changedEvent.Event -- (player) 데이터 구조가 바뀜 (조각, 전시 등)
+
+local handlers: { [string]: (Player, ...any) -> any } = {}
+local lastCalls: { [Player]: { number } } = {}
+
+-- 버튼 요청 처리 함수 등록. 반환값: (성공 여부, 메시지)
+function Net.Handle(action: string, fn: (Player, ...any) -> any)
+	handlers[action] = fn
+end
+
+Net.Action.OnServerInvoke = function(player: Player, action: any, ...: any)
+	if type(action) ~= "string" or not handlers[action] then
+		return false, "알 수 없는 요청"
+	end
+	-- 초당 10회 제한
+	local now = os.clock()
+	local calls = lastCalls[player] or {}
+	lastCalls[player] = calls
+	while calls[1] and now - calls[1] > 1 do
+		table.remove(calls, 1)
+	end
+	if #calls >= 10 then
+		return false, "너무 빨라요!"
+	end
+	table.insert(calls, now)
+
+	if not DataService.Get(player) then
+		return false, "데이터를 불러오는 중이에요"
+	end
+	local ok, success, message = pcall(handlers[action], player, ...)
+	if not ok then
+		warn("[Net] " .. action .. " 오류:", success)
+		return false, "오류가 발생했어요"
+	end
+	return success, message
+end
+
+Players.PlayerRemoving:Connect(function(player)
+	lastCalls[player] = nil
+end)
+
+function Net.Snapshot(player: Player): any?
+	local data = DataService.Get(player)
+	if not data then
+		return nil
+	end
+	local passes = Passes.Get(player)
+	return {
+		coins = data.coins,
+		tool = data.tool,
+		ownedTools = data.ownedTools,
+		pieces = data.pieces,
+		museum = data.museum,
+		slots = data.slots,
+		likes = data.likes,
+		luckBoostUntil = data.luckBoostUntil,
+		stats = data.stats,
+		passes = passes,
+		income = Economy.GetIncome(data, passes),
+		luck = Economy.GetLuck(data, passes, 0),
+		cooldown = Economy.GetDigCooldown(data, passes),
+	}
+end
+
+-- 코인 숫자만 빠르게 갱신 (자주 호출해도 됨)
+function Net.UpdateCoins(player: Player)
+	local data = DataService.Get(player)
+	if not data then
+		return
+	end
+	player:SetAttribute("Coins", data.coins)
+	local stats = player:FindFirstChild("leaderstats")
+	local coinsValue = stats and stats:FindFirstChild("코인")
+	if coinsValue then
+		(coinsValue :: IntValue).Value = math.floor(data.coins)
+	end
+end
+
+-- 데이터 구조가 바뀌었을 때 호출 → 잠시 후 한 번에 전송
+local pending: { [Player]: boolean } = {}
+function Net.MarkDirty(player: Player)
+	Net.UpdateCoins(player)
+	if pending[player] then
+		return
+	end
+	pending[player] = true
+	task.defer(function()
+		pending[player] = nil
+		if player.Parent then
+			local snapshot = Net.Snapshot(player)
+			if snapshot then
+				Net.Sync:FireClient(player, snapshot)
+				changedEvent:Fire(player)
+			end
+		end
+	end)
+end
+
+function Net.Tell(player: Player, text: string, color: Color3?)
+	Net.Notify:FireClient(player, { kind = "Text", text = text, color = color })
+end
+
+function Net.Announce(text: string, color: Color3?)
+	Net.Notify:FireAllClients({ kind = "Announce", text = text, color = color })
+end
+
+Net.Handle("GetSnapshot", function(player)
+	return true, Net.Snapshot(player)
+end)
+
+return Net
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000C"><Properties><string name="Name">Passes</string><string name="Source"><![CDATA[-- 게임 패스 보유 여부 (접속 시 확인하고 기억)
+local MarketplaceService = game:GetService("MarketplaceService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+
+local Passes = {}
+
+local owned: { [Player]: { [string]: boolean } } = {}
+local changedEvent = Instance.new("BindableEvent")
+Passes.Changed = changedEvent.Event -- (player)
+
+local function check(player: Player)
+	local result = { DoubleSpeed = false, DoubleLuck = false, DoubleIncome = false }
+	for key, pass in Config.GamePasses do
+		if pass.id ~= 0 then
+			local ok, has = pcall(function()
+				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, pass.id)
+			end)
+			result[key] = ok and has == true
+		end
+	end
+	owned[player] = result
+	changedEvent:Fire(player)
+end
+
+function Passes.Get(player: Player): { DoubleSpeed: boolean, DoubleLuck: boolean, DoubleIncome: boolean }
+	return (owned[player] or { DoubleSpeed = false, DoubleLuck = false, DoubleIncome = false }) :: any
+end
+
+function Passes.Init()
+	Players.PlayerAdded:Connect(check)
+	for _, player in Players:GetPlayers() do
+		task.spawn(check, player)
+	end
+	Players.PlayerRemoving:Connect(function(player)
+		owned[player] = nil
+	end)
+
+	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, purchased)
+		if not purchased then
+			return
+		end
+		for key, pass in Config.GamePasses do
+			if pass.id == passId then
+				local current = owned[player]
+				if current then
+					current[key] = true
+				end
+				changedEvent:Fire(player)
+			end
+		end
+	end)
+end
+
+return Passes
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000D"><Properties><string name="Name">ShopService</string><string name="Source"><![CDATA[-- 상점: 코인으로 도구/전시대 구매, Robux 개발자 상품 처리
+local MarketplaceService = game:GetService("MarketplaceService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local Economy = require(ReplicatedStorage.Shared.Economy)
+local Util = require(ReplicatedStorage.Shared.Util)
+local DataService = require(script.Parent.DataService)
+local Passes = require(script.Parent.Passes)
+local Net = require(script.Parent.Net)
+local DigService = require(script.Parent.DigService)
+
+local ShopService = {}
+
+local MAX_RECEIPTS = 50
+
+Net.Handle("BuyTool", function(player, toolId)
+	local data = DataService.Get(player)
+	local def = type(toolId) == "string" and Config.ToolsById[toolId]
+	if not def then
+		return false, "없는 도구예요"
+	end
+	if data.ownedTools[def.id] then
+		return false, "이미 가지고 있어요"
+	end
+	if data.coins < def.price then
+		return false, "코인이 " .. Util.FormatNumber(def.price - data.coins) .. " 부족해요"
+	end
+	data.coins -= def.price
+	data.ownedTools[def.id] = true
+	data.tool = def.id
+	DigService.GiveTool(player)
+	Net.MarkDirty(player)
+	return true, def.name .. " 구매 완료! ⛏️"
+end)
+
+Net.Handle("EquipTool", function(player, toolId)
+	local data = DataService.Get(player)
+	if type(toolId) ~= "string" or not data.ownedTools[toolId] or not Config.ToolsById[toolId] then
+		return false, "가지고 있지 않은 도구예요"
+	end
+	data.tool = toolId
+	DigService.GiveTool(player)
+	Net.MarkDirty(player)
+	return true, nil
+end)
+
+Net.Handle("BuySlot", function(player)
+	local data = DataService.Get(player)
+	local price = Economy.GetNextSlotPrice(data)
+	if not price then
+		return false, "전시대를 모두 열었어요"
+	end
+	if data.coins < price then
+		return false, "코인이 " .. Util.FormatNumber(price - data.coins) .. " 부족해요"
+	end
+	data.coins -= price
+	data.slots = math.min(data.slots + Config.SlotStep, Config.MaxSlots)
+	Net.MarkDirty(player)
+	return true, "전시대 확장! 이제 " .. data.slots .. "개를 전시할 수 있어요"
+end)
+
+----------------------------------------------------------------------
+-- Robux 개발자 상품
+----------------------------------------------------------------------
+local function grantProduct(player: Player, data: any, productId: number): boolean
+	for key, product in Config.Products do
+		if product.id == productId and product.id ~= 0 then
+			if key == "LuckBoost" then
+				local start = math.max(data.luckBoostUntil, os.time())
+				data.luckBoostUntil = start + (product.minutes or 15) * 60
+				Net.Tell(player, "🍀 행운 부스트가 켜졌어요!", Color3.fromRGB(120, 255, 120))
+			else
+				local income = Economy.GetIncome(data, Passes.Get(player))
+				local coins = math.max(product.minCoins or 0, math.floor(income * (product.coinsSeconds or 0)))
+				data.coins += coins
+				Net.Tell(player, "💰 " .. Util.FormatNumber(coins) .. " 코인을 받았어요! 감사합니다!", Color3.fromRGB(255, 220, 90))
+			end
+			return true
+		end
+	end
+	return false
+end
+
+local function processReceipt(receipt)
+	local player = Players:GetPlayerByUserId(receipt.PlayerId)
+	if not player then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	local data = DataService.Get(player)
+	if not data then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	if table.find(data.purchases, receipt.PurchaseId) then
+		return Enum.ProductPurchaseDecision.PurchaseGranted
+	end
+	if not grantProduct(player, data, receipt.ProductId) then
+		warn("[ShopService] 알 수 없는 상품 ID:", receipt.ProductId)
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	table.insert(data.purchases, receipt.PurchaseId)
+	while #data.purchases > MAX_RECEIPTS do
+		table.remove(data.purchases, 1)
+	end
+	Net.MarkDirty(player)
+	-- 바로 저장해서 서버가 꺼져도 지급 기록이 남도록
+	DataService.Save(player)
+	return Enum.ProductPurchaseDecision.PurchaseGranted
+end
+
+function ShopService.Init()
+	MarketplaceService.ProcessReceipt = processReceipt
+end
+
+return ShopService
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000E"><Properties><string name="Name">WorldBuilder</string><string name="Source"><![CDATA[-- 맵 자동 생성: 땅, 발굴장, 박물관 부지 8개
+-- Studio 에서 맵을 직접 꾸미고 싶다면 이 파일의 숫자/색을 바꾸거나
+-- 생성된 파트 주변에 장식을 추가하세요.
+local Lighting = game:GetService("Lighting")
+
+local WorldBuilder = {}
+
+export type World = {
+	root: Folder,
+	field: Folder,
+	spots: { Vector3 }, -- 흙더미 위치
+	meteorRing: { inner: number, outer: number },
+	plots: { Model },
+	fieldSpawn: CFrame,
+}
+
+local PLOT_COUNT = 8
+local PLOT_RADIUS = 150
+local PLOT_SIZE = 48
+local FIELD_GRID = 10
+local FIELD_SPACING = 9
+
+-- 전시대 위치 (박물관 기준 로컬 좌표, 앞쪽 = -Z)
+WorldBuilder.PedestalOffsets = {}
+for _, z in { -13, -3, 7, 17 } do
+	for _, x in { -15, -5, 5, 15 } do
+		table.insert(WorldBuilder.PedestalOffsets, Vector3.new(x, 0, z))
+	end
+end
+
+local function part(props: { [string]: any }): Part
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	if props.Shape then
+		p.Shape = props.Shape
+	end
+	for key, value in props do
+		if key ~= "Parent" and key ~= "Shape" then
+			(p :: any)[key] = value
+		end
+	end
+	p.Parent = props.Parent
+	return p
+end
+
+local function label(parent: Instance, face: Enum.NormalId, text: string, color: Color3): TextLabel
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = face
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 40
+	gui.Parent = parent
+	local tl = Instance.new("TextLabel")
+	tl.Name = "Text"
+	tl.Size = UDim2.fromScale(1, 1)
+	tl.BackgroundTransparency = 1
+	tl.TextScaled = true
+	tl.Font = Enum.Font.FredokaOne
+	tl.TextColor3 = color
+	tl.TextStrokeTransparency = 0.3
+	tl.Text = text
+	tl.Parent = gui
+	return tl
+end
+
+local function buildPlot(parent: Instance, index: number, cf: CFrame): Model
+	local plot = Instance.new("Model")
+	plot.Name = "Plot" .. index
+	plot:SetAttribute("Index", index)
+	plot:SetAttribute("OwnerUserId", 0)
+
+	local half = PLOT_SIZE / 2
+	local marble = Color3.fromRGB(235, 230, 220)
+	local trim = Color3.fromRGB(180, 150, 100)
+
+	local floor = part({
+		Name = "Floor",
+		Size = Vector3.new(PLOT_SIZE, 1, PLOT_SIZE),
+		CFrame = cf * CFrame.new(0, 0.5, 0),
+		Material = Enum.Material.Marble,
+		Color = marble,
+		Parent = plot,
+	})
+	plot.PrimaryPart = floor
+
+	-- 뒷벽, 옆벽
+	part({ Name = "WallBack", Size = Vector3.new(PLOT_SIZE, 10, 1), CFrame = cf * CFrame.new(0, 6, half - 0.5), Material = Enum.Material.Marble, Color = Color3.fromRGB(215, 205, 190), Parent = plot })
+	part({ Name = "WallLeft", Size = Vector3.new(1, 6, PLOT_SIZE), CFrame = cf * CFrame.new(-half + 0.5, 4, 0), Material = Enum.Material.Marble, Color = Color3.fromRGB(215, 205, 190), Parent = plot })
+	part({ Name = "WallRight", Size = Vector3.new(1, 6, PLOT_SIZE), CFrame = cf * CFrame.new(half - 0.5, 4, 0), Material = Enum.Material.Marble, Color = Color3.fromRGB(215, 205, 190), Parent = plot })
+
+	-- 입구 기둥
+	for _, x in { -half + 2, -8, 8, half - 2 } do
+		local pillar = part({ Name = "Pillar", Shape = Enum.PartType.Cylinder, Size = Vector3.new(12, 2.4, 2.4), CFrame = cf * CFrame.new(x, 7, -half + 1.5) * CFrame.Angles(0, 0, math.rad(90)), Material = Enum.Material.Marble, Color = marble, Parent = plot })
+		pillar.CastShadow = true
+	end
+	part({ Name = "Lintel", Size = Vector3.new(PLOT_SIZE, 1.5, 3), CFrame = cf * CFrame.new(0, 13.75, -half + 1.5), Material = Enum.Material.Marble, Color = trim, Parent = plot })
+
+	-- 간판 (입구 위)
+	local sign = part({ Name = "Sign", Size = Vector3.new(22, 4, 0.6), CFrame = cf * CFrame.new(0, 16.5, -half + 1.5), Material = Enum.Material.Wood, Color = Color3.fromRGB(110, 75, 45), Parent = plot })
+	local title = label(sign, Enum.NormalId.Front, "빈 박물관", Color3.fromRGB(255, 240, 200))
+	title.Name = "Title"
+
+	-- 좋아요 받침대 (입구 옆)
+	local likeStand = part({ Name = "LikeStand", Size = Vector3.new(3, 4, 3), CFrame = cf * CFrame.new(-11, 2, -half - 2), Material = Enum.Material.Marble, Color = Color3.fromRGB(255, 120, 150), Parent = plot })
+	label(likeStand, Enum.NormalId.Front, "❤️", Color3.new(1, 1, 1)).Name = "Likes"
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "LikePrompt"
+	prompt.ActionText = "좋아요 ❤️"
+	prompt.ObjectText = "박물관"
+	prompt.HoldDuration = 0.4
+	prompt.MaxActivationDistance = 12
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = likeStand
+
+	-- 전시대
+	local pedestals = Instance.new("Folder")
+	pedestals.Name = "Pedestals"
+	pedestals.Parent = plot
+	for i, offset in WorldBuilder.PedestalOffsets do
+		local ped = part({
+			Name = tostring(i),
+			Size = Vector3.new(6, 2, 6),
+			CFrame = cf * CFrame.new(offset + Vector3.new(0, 2, 0)),
+			Material = Enum.Material.Marble,
+			Color = Color3.fromRGB(200, 195, 185),
+			Parent = pedestals,
+		})
+		ped.Transparency = 0.6
+	end
+
+	local displays = Instance.new("Folder")
+	displays.Name = "Displays"
+	displays.Parent = plot
+
+	local entry = part({ Name = "Entry", Size = Vector3.new(2, 1, 2), CFrame = cf * CFrame.new(0, 3.5, -half + 6), Transparency = 1, CanCollide = false, CanQuery = false, Parent = plot })
+	entry.CanTouch = false
+
+	plot.Parent = parent
+	return plot
+end
+
+function WorldBuilder.Build(): World
+	local existing = workspace:FindFirstChild("FossilWorld")
+	if existing then
+		existing:Destroy()
+	end
+	local root = Instance.new("Folder")
+	root.Name = "FossilWorld"
+	root.Parent = workspace
+
+	-- 기본 Baseplate 는 숨김
+	local baseplate = workspace:FindFirstChild("Baseplate")
+	if baseplate and baseplate:IsA("BasePart") then
+		baseplate.Transparency = 1
+		baseplate.CanCollide = false
+		baseplate.CanQuery = false
+	end
+
+	part({ Name = "Ground", Size = Vector3.new(800, 4, 800), CFrame = CFrame.new(0, -2, 0), Material = Enum.Material.Sand, Color = Color3.fromRGB(226, 198, 140), Parent = root })
+
+	-- 발굴장 바닥 (어두운 흙)
+	local fieldSize = FIELD_GRID * FIELD_SPACING + 12
+	part({ Name = "FieldFloor", Size = Vector3.new(fieldSize, 0.2, fieldSize), CFrame = CFrame.new(0, 0.1, 0), Material = Enum.Material.Ground, Color = Color3.fromRGB(150, 110, 75), Parent = root })
+
+	-- 울타리
+	local fenceColor = Color3.fromRGB(120, 85, 50)
+	local halfField = fieldSize / 2
+	for _, side in { { 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 } } do
+		local sx, sz = side[1], side[2]
+		local alongX = sz ~= 0
+		local size = if alongX then Vector3.new(fieldSize, 1, 0.6) else Vector3.new(0.6, 1, fieldSize)
+		part({ Name = "Fence", Size = size, CFrame = CFrame.new(sx * halfField, 2, sz * halfField), Material = Enum.Material.WoodPlanks, Color = fenceColor, CanCollide = false, Parent = root })
+		for t = -halfField, halfField, 10 do
+			local pos = if alongX then Vector3.new(t, 1.5, sz * halfField) else Vector3.new(sx * halfField, 1.5, t)
+			part({ Name = "Post", Size = Vector3.new(0.8, 3, 0.8), CFrame = CFrame.new(pos), Material = Enum.Material.Wood, Color = fenceColor, CanCollide = false, Parent = root })
+		end
+	end
+
+	-- 발굴장 간판
+	local fieldSign = part({ Name = "FieldSign", Size = Vector3.new(16, 4, 0.6), CFrame = CFrame.new(0, 6, -halfField - 4), Material = Enum.Material.Wood, Color = Color3.fromRGB(110, 75, 45), Parent = root })
+	label(fieldSign, Enum.NormalId.Front, "⛏️ 발굴장 ⛏️", Color3.fromRGB(255, 230, 160))
+	label(fieldSign, Enum.NormalId.Back, "⛏️ 발굴장 ⛏️", Color3.fromRGB(255, 230, 160))
+	part({ Name = "SignPost", Size = Vector3.new(0.8, 4, 0.8), CFrame = CFrame.new(-6, 2, -halfField - 4), Material = Enum.Material.Wood, Color = fenceColor, Parent = root })
+	part({ Name = "SignPost", Size = Vector3.new(0.8, 4, 0.8), CFrame = CFrame.new(6, 2, -halfField - 4), Material = Enum.Material.Wood, Color = fenceColor, Parent = root })
+
+	local field = Instance.new("Folder")
+	field.Name = "DigField"
+	field.Parent = root
+
+	local spots = {}
+	local start = -(FIELD_GRID - 1) * FIELD_SPACING / 2
+	for gx = 0, FIELD_GRID - 1 do
+		for gz = 0, FIELD_GRID - 1 do
+			table.insert(spots, Vector3.new(start + gx * FIELD_SPACING, 0, start + gz * FIELD_SPACING))
+		end
+	end
+
+	local spawn = Instance.new("SpawnLocation")
+	spawn.Name = "FieldSpawn"
+	spawn.Anchored = true
+	spawn.Size = Vector3.new(8, 1, 8)
+	spawn.CFrame = CFrame.new(0, 0.5, -halfField - 12)
+	spawn.Material = Enum.Material.Slate
+	spawn.Color = Color3.fromRGB(180, 160, 120)
+	spawn.Duration = 0
+	spawn.Parent = root
+
+	-- 박물관 부지 + 길
+	local plots = {}
+	for i = 1, PLOT_COUNT do
+		local angle = (i - 1) / PLOT_COUNT * math.pi * 2
+		local pos = Vector3.new(math.cos(angle) * PLOT_RADIUS, 0, math.sin(angle) * PLOT_RADIUS)
+		local cf = CFrame.lookAt(pos, Vector3.zero) -- 입구(-Z)가 발굴장을 향함
+		table.insert(plots, buildPlot(root, i, cf))
+
+		local pathStart = pos.Unit * (halfField + 2)
+		local pathEnd = pos.Unit * (PLOT_RADIUS - PLOT_SIZE / 2 - 1)
+		local mid = (pathStart + pathEnd) / 2
+		local len = (pathEnd - pathStart).Magnitude
+		part({ Name = "Path", Size = Vector3.new(7, 0.2, len), CFrame = CFrame.lookAt(mid + Vector3.new(0, 0.1, 0), pathEnd + Vector3.new(0, 0.1, 0)), Material = Enum.Material.Cobblestone, Color = Color3.fromRGB(170, 160, 145), CanQuery = false, Parent = root })
+	end
+
+	-- 분위기
+	Lighting.ClockTime = 14.5
+	Lighting.Brightness = 2.5
+	Lighting.OutdoorAmbient = Color3.fromRGB(150, 140, 125)
+
+	return {
+		root = root,
+		field = field,
+		spots = spots,
+		meteorRing = { inner = halfField + 18, outer = halfField + 40 },
+		plots = plots,
+		fieldSpawn = spawn.CFrame + Vector3.new(0, 3, 0),
+	}
+end
+
+return WorldBuilder
+]]></string></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX00000019"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX00000018"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="Folder" referent="RBX00000017"><Properties><string name="Name">Client</string></Properties><Item class="ModuleScript" referent="RBX00000011"><Properties><string name="Name">Digger</string><string name="Source"><![CDATA[-- 삽을 들고 클릭/터치(누르고 있기)하면 흙더미를 팜
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+
+local Digger = {}
+
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+local remotes = ReplicatedStorage:WaitForChild("Remotes")
+local digRemote = remotes:WaitForChild("Dig") :: RemoteEvent
+
+local getCooldown: () -> number = function()
+	return 0.5
+end
+local onTooFar: () -> () = function() end
+
+local equippedTool: Tool? = nil
+local holding = false
+local digging = false
+
+local highlight = Instance.new("Highlight")
+highlight.FillTransparency = 0.75
+highlight.FillColor = Color3.fromRGB(255, 230, 120)
+highlight.OutlineColor = Color3.fromRGB(255, 240, 180)
+highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+highlight.Parent = workspace
+
+local function targetMound(): BasePart?
+	local target = mouse.Target
+	if target and CollectionService:HasTag(target, "DigMound") and target.Transparency < 1 then
+		return target
+	end
+	return nil
+end
+
+local function inRange(part: BasePart): boolean
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	return root ~= nil and (root.Position - part.Position).Magnitude <= Config.DigRange - 0.5
+end
+
+local function digLoop()
+	if digging then
+		return
+	end
+	digging = true
+	local lastWarn = 0
+	while holding and equippedTool and equippedTool.Parent == player.Character do
+		local mound = targetMound()
+		if mound then
+			if inRange(mound) then
+				digRemote:FireServer(mound)
+				-- 손맛: 도구를 살짝 흔들기
+				local tool = equippedTool
+				local grip = tool.Grip
+				tool.Grip = grip * CFrame.Angles(math.rad(-35), 0, 0)
+				task.delay(0.12, function()
+					if tool.Parent then
+						tool.Grip = grip
+					end
+				end)
+			elseif os.clock() - lastWarn > 2 then
+				lastWarn = os.clock()
+				onTooFar()
+			end
+		end
+		task.wait(getCooldown())
+	end
+	digging = false
+end
+
+local function hookTool(tool: Tool)
+	if tool:GetAttribute("Hooked") then
+		return
+	end
+	tool:SetAttribute("Hooked", true)
+	tool.Equipped:Connect(function()
+		equippedTool = tool
+	end)
+	tool.Unequipped:Connect(function()
+		if equippedTool == tool then
+			equippedTool = nil
+		end
+		holding = false
+	end)
+	tool.Activated:Connect(function()
+		holding = true
+		task.spawn(digLoop)
+	end)
+	tool.Deactivated:Connect(function()
+		holding = false
+	end)
+end
+
+local function watch(container: Instance)
+	container.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") and child:GetAttribute("DigTool") then
+			hookTool(child)
+			if child.Parent == player.Character then
+				equippedTool = child
+			end
+		end
+	end)
+	for _, child in container:GetChildren() do
+		if child:IsA("Tool") and child:GetAttribute("DigTool") then
+			hookTool(child)
+		end
+	end
+end
+
+function Digger.Init(cooldownFn: () -> number, tooFarFn: () -> ())
+	getCooldown = cooldownFn
+	onTooFar = tooFarFn
+
+	local function onCharacter(character: Model)
+		equippedTool = nil
+		holding = false
+		watch(character)
+		local backpack = player:WaitForChild("Backpack")
+		watch(backpack)
+	end
+	player.CharacterAdded:Connect(onCharacter)
+	player.ChildAdded:Connect(function(child)
+		if child:IsA("Backpack") then
+			watch(child)
+		end
+	end)
+	if player.Character then
+		onCharacter(player.Character)
+	end
+
+	-- 마우스를 올린 흙더미 강조
+	RunService.RenderStepped:Connect(function()
+		if equippedTool and equippedTool.Parent == player.Character then
+			local mound = targetMound()
+			highlight.Adornee = mound
+			if mound then
+				highlight.OutlineColor = if inRange(mound) then Color3.fromRGB(255, 240, 180) else Color3.fromRGB(255, 90, 90)
+			end
+		else
+			highlight.Adornee = nil
+		end
+	end)
+end
+
+return Digger
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">Effects</string><string name="Source"><![CDATA[-- 흙 튀기기, 코인 숫자 떠오르기 같은 연출 (내 화면에서만)
+local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
+
+local Effects = {}
+
+local folder = Instance.new("Folder")
+folder.Name = "LocalEffects"
+folder.Parent = workspace
+
+function Effects.DirtBurst(position: Vector3, color: Color3, big: boolean)
+	local count = if big then 12 else 4
+	for _ = 1, count do
+		local chunk = Instance.new("Part")
+		chunk.Size = Vector3.one * (0.3 + math.random() * 0.4)
+		chunk.Color = color
+		chunk.Material = Enum.Material.Ground
+		chunk.CanCollide = false
+		chunk.CanQuery = false
+		chunk.CanTouch = false
+		chunk.CastShadow = false
+		chunk.Position = position + Vector3.new(math.random() * 2 - 1, 1.5, math.random() * 2 - 1)
+		chunk.Parent = folder
+		chunk.AssemblyLinearVelocity = Vector3.new(math.random() * 16 - 8, 12 + math.random() * 10, math.random() * 16 - 8)
+		Debris:AddItem(chunk, 0.9)
+	end
+end
+
+function Effects.FloatText(position: Vector3, text: string, color: Color3)
+	local anchor = Instance.new("Part")
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanQuery = false
+	anchor.CanTouch = false
+	anchor.Transparency = 1
+	anchor.Size = Vector3.one * 0.2
+	anchor.Position = position + Vector3.new(0, 3, 0)
+	anchor.Parent = folder
+
+	local gui = Instance.new("BillboardGui")
+	gui.Size = UDim2.fromOffset(160, 40)
+	gui.AlwaysOnTop = true
+	gui.Parent = anchor
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.TextColor3 = color
+	label.TextStrokeTransparency = 0.2
+	label.Text = text
+	label.Parent = gui
+
+	local info = TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(anchor, info, { Position = anchor.Position + Vector3.new(0, 4, 0) }):Play()
+	TweenService:Create(label, info, { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
+	Debris:AddItem(anchor, 1.1)
+end
+
+return Effects
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000013"><Properties><string name="Name">Gui</string><string name="Source"><![CDATA[-- UI 만들기 도우미
+local Gui = {}
+
+Gui.Colors = {
+	Panel = Color3.fromRGB(30, 26, 22),
+	PanelLight = Color3.fromRGB(52, 45, 38),
+	Text = Color3.fromRGB(255, 245, 225),
+	SubText = Color3.fromRGB(200, 185, 160),
+	Gold = Color3.fromRGB(255, 205, 70),
+	Green = Color3.fromRGB(70, 190, 90),
+	Blue = Color3.fromRGB(70, 140, 230),
+	Red = Color3.fromRGB(220, 70, 70),
+	Disabled = Color3.fromRGB(90, 85, 80),
+}
+
+-- Gui.new("Frame", { Size = ..., Parent = ... }, { 자식들 })
+function Gui.new(className: string, props: { [string]: any }?, children: { Instance }?): any
+	local inst = Instance.new(className)
+	local parent = nil
+	if props then
+		for key, value in props do
+			if key == "Parent" then
+				parent = value
+			else
+				(inst :: any)[key] = value
+			end
+		end
+	end
+	if children then
+		for _, child in children do
+			child.Parent = inst
+		end
+	end
+	if parent then
+		inst.Parent = parent
+	end
+	return inst
+end
+
+function Gui.corner(radius: number?): UICorner
+	return Gui.new("UICorner", { CornerRadius = UDim.new(0, radius or 10) })
+end
+
+function Gui.stroke(color: Color3?, thickness: number?): UIStroke
+	return Gui.new("UIStroke", {
+		Color = color or Color3.new(0, 0, 0),
+		Thickness = thickness or 2,
+		Transparency = 0.3,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+	})
+end
+
+function Gui.padding(px: number): UIPadding
+	return Gui.new("UIPadding", {
+		PaddingLeft = UDim.new(0, px),
+		PaddingRight = UDim.new(0, px),
+		PaddingTop = UDim.new(0, px),
+		PaddingBottom = UDim.new(0, px),
+	})
+end
+
+function Gui.label(props: { [string]: any }): TextLabel
+	local defaults = {
+		BackgroundTransparency = 1,
+		Font = Enum.Font.GothamBold,
+		TextColor3 = Gui.Colors.Text,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}
+	for k, v in props do
+		defaults[k] = v
+	end
+	local children = { Gui.new("UITextSizeConstraint", { MaxTextSize = props.MaxTextSize or 22 }) }
+	defaults.MaxTextSize = nil
+	return Gui.new("TextLabel", defaults, children)
+end
+
+function Gui.button(props: { [string]: any }, onClick: () -> ()): TextButton
+	local defaults = {
+		BackgroundColor3 = Gui.Colors.Blue,
+		Font = Enum.Font.FredokaOne,
+		TextColor3 = Color3.new(1, 1, 1),
+		TextScaled = true,
+		AutoButtonColor = true,
+	}
+	for k, v in props do
+		defaults[k] = v
+	end
+	local maxText = props.MaxTextSize or 20
+	defaults.MaxTextSize = nil
+	local button = Gui.new("TextButton", defaults, {
+		Gui.corner(8),
+		Gui.stroke(Color3.new(0, 0, 0), 1.5),
+		Gui.new("UITextSizeConstraint", { MaxTextSize = maxText }),
+		Gui.new("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), PaddingTop = UDim.new(0, 3), PaddingBottom = UDim.new(0, 3) }),
+	})
+	button.Activated:Connect(onClick)
+	return button
+end
+
+return Gui
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000014"><Properties><string name="Name">Hud</string><string name="Source"><![CDATA[-- 화면 위 정보: 코인, 수입, 이벤트 배너, 메뉴 버튼, 알림
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+
+local Util = require(ReplicatedStorage.Shared.Util)
+local Gui = require(script.Parent.Gui)
+
+local Hud = {}
+
+local player = Players.LocalPlayer
+local screen: ScreenGui
+local coinsLabel: TextLabel
+local incomeLabel: TextLabel
+local boostLabel: TextLabel
+local eventLabel: TextLabel
+local toastHolder: Frame
+local badges: { [string]: Frame } = {}
+
+function Hud.Create(onMenu: (string) -> ())
+	screen = Gui.new("ScreenGui", {
+		Name = "FossilHud",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = false,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		Parent = player:WaitForChild("PlayerGui"),
+	})
+
+	-- 코인 표시 (위 가운데)
+	local top = Gui.new("Frame", {
+		Name = "Top",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 8),
+		Size = UDim2.fromOffset(260, 62),
+		BackgroundColor3 = Gui.Colors.Panel,
+		BackgroundTransparency = 0.15,
+		Parent = screen,
+	}, { Gui.corner(14), Gui.stroke(Gui.Colors.Gold, 2) })
+	coinsLabel = Gui.label({
+		Size = UDim2.new(1, -16, 0, 34),
+		Position = UDim2.fromOffset(8, 4),
+		Font = Enum.Font.FredokaOne,
+		TextColor3 = Gui.Colors.Gold,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Text = "💰 0",
+		MaxTextSize = 30,
+		Parent = top,
+	})
+	incomeLabel = Gui.label({
+		Size = UDim2.new(1, -16, 0, 20),
+		Position = UDim2.fromOffset(8, 38),
+		TextColor3 = Gui.Colors.SubText,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Text = "🏛️ +0/초",
+		MaxTextSize = 16,
+		Parent = top,
+	})
+
+	boostLabel = Gui.label({
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 74),
+		Size = UDim2.fromOffset(260, 20),
+		TextColor3 = Color3.fromRGB(130, 255, 130),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextStrokeTransparency = 0.4,
+		Text = "",
+		MaxTextSize = 16,
+		Visible = false,
+		Parent = screen,
+	})
+
+	-- 운석 이벤트 배너
+	local banner = Gui.new("Frame", {
+		Name = "Event",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -10, 0, 8),
+		Size = UDim2.fromOffset(210, 40),
+		BackgroundColor3 = Color3.fromRGB(45, 25, 70),
+		BackgroundTransparency = 0.15,
+		Parent = screen,
+	}, { Gui.corner(10), Gui.stroke(Color3.fromRGB(180, 120, 255), 2) })
+	eventLabel = Gui.label({
+		Size = UDim2.new(1, -12, 1, -8),
+		Position = UDim2.fromOffset(6, 4),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Text = "☄️ 운석까지 --:--",
+		MaxTextSize = 17,
+		Parent = banner,
+	})
+
+	-- 왼쪽 메뉴 버튼
+	local menu = Gui.new("Frame", {
+		Name = "Menu",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 10, 0.5, 0),
+		Size = UDim2.fromOffset(120, 4 * 52),
+		BackgroundTransparency = 1,
+		Parent = screen,
+	}, {
+		Gui.new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }),
+	})
+	local buttons = {
+		{ id = "Collection", text = "📖 도감", color = Color3.fromRGB(200, 140, 60) },
+		{ id = "Shop", text = "🛒 상점", color = Gui.Colors.Green },
+		{ id = "Museum", text = "🏛️ 내 박물관", color = Gui.Colors.Blue },
+		{ id = "Field", text = "⛏️ 발굴장", color = Color3.fromRGB(150, 100, 70) },
+	}
+	for i, info in buttons do
+		local b = Gui.button({
+			Name = info.id,
+			LayoutOrder = i,
+			Size = UDim2.fromOffset(120, 44),
+			BackgroundColor3 = info.color,
+			Text = info.text,
+			MaxTextSize = 18,
+			Parent = menu,
+		}, function()
+			onMenu(info.id)
+		end)
+		local badge = Gui.new("Frame", {
+			Name = "Badge",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(1, -4, 0, 4),
+			Size = UDim2.fromOffset(18, 18),
+			BackgroundColor3 = Gui.Colors.Red,
+			Visible = false,
+			ZIndex = 3,
+			Parent = b,
+		}, { Gui.corner(9) })
+		Gui.label({ Size = UDim2.fromScale(1, 1), Text = "!", TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 4, MaxTextSize = 14, Parent = badge })
+		badges[info.id] = badge
+	end
+
+	-- 알림 목록 (아래 가운데)
+	toastHolder = Gui.new("Frame", {
+		Name = "Toasts",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -90),
+		Size = UDim2.fromOffset(440, 260),
+		BackgroundTransparency = 1,
+		Parent = screen,
+	}, {
+		Gui.new("UIListLayout", {
+			Padding = UDim.new(0, 6),
+			VerticalAlignment = Enum.VerticalAlignment.Bottom,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		Gui.new("UISizeConstraint", { MaxSize = Vector2.new(440, 260) }),
+	})
+
+	return screen
+end
+
+function Hud.GetScreen(): ScreenGui
+	return screen
+end
+
+function Hud.SetCoins(coins: number)
+	coinsLabel.Text = "💰 " .. Util.FormatNumber(coins)
+end
+
+function Hud.SetIncome(income: number)
+	incomeLabel.Text = "🏛️ 관람 수입 +" .. Util.FormatNumber(income) .. "/초"
+end
+
+function Hud.SetBoost(secondsLeft: number)
+	if secondsLeft > 0 then
+		boostLabel.Visible = true
+		boostLabel.Text = "🍀 행운 부스트 " .. Util.FormatTime(secondsLeft)
+	else
+		boostLabel.Visible = false
+	end
+end
+
+function Hud.SetEvent(text: string)
+	eventLabel.Text = text
+end
+
+function Hud.SetBadge(id: string, visible: boolean)
+	local badge = badges[id]
+	if badge then
+		badge.Visible = visible
+	end
+end
+
+local toastOrder = 0
+-- big = true 면 크게 표시 (희귀 발견 등)
+function Hud.Toast(text: string, color: Color3?, big: boolean?, duration: number?)
+	toastOrder += 1
+	local height = if big then 52 else 34
+	local frame = Gui.new("Frame", {
+		LayoutOrder = toastOrder,
+		Size = UDim2.new(1, 0, 0, height),
+		BackgroundColor3 = Gui.Colors.Panel,
+		BackgroundTransparency = 0.15,
+		Parent = toastHolder,
+	}, { Gui.corner(10), Gui.stroke(color or Gui.Colors.SubText, if big then 3 else 1.5) })
+	local label = Gui.label({
+		Size = UDim2.new(1, -16, 1, -8),
+		Position = UDim2.fromOffset(8, 4),
+		Text = text,
+		TextColor3 = color or Gui.Colors.Text,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Font = if big then Enum.Font.FredokaOne else Enum.Font.GothamBold,
+		MaxTextSize = if big then 24 else 17,
+		Parent = frame,
+	})
+	if big then
+		local scale = Gui.new("UIScale", { Scale = 0.6, Parent = frame })
+		TweenService:Create(scale, TweenInfo.new(0.35, Enum.EasingStyle.Back), { Scale = 1 }):Play()
+	end
+
+	-- 너무 많이 쌓이면 오래된 것부터 삭제
+	local toasts = {}
+	for _, child in toastHolder:GetChildren() do
+		if child:IsA("Frame") then
+			table.insert(toasts, child)
+		end
+	end
+	table.sort(toasts, function(a, b)
+		return a.LayoutOrder < b.LayoutOrder
+	end)
+	while #toasts > 6 do
+		table.remove(toasts, 1):Destroy()
+	end
+
+	task.delay(duration or (if big then 4 else 2.5), function()
+		if not frame.Parent then
+			return
+		end
+		local info = TweenInfo.new(0.4)
+		TweenService:Create(frame, info, { BackgroundTransparency = 1 }):Play()
+		TweenService:Create(label, info, { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
+		local stroke = frame:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			TweenService:Create(stroke, info, { Transparency = 1 }):Play()
+		end
+		task.wait(0.45)
+		frame:Destroy()
+	end)
+end
+
+return Hud
+]]></string></Properties></Item><Item class="LocalScript" referent="RBX00000015"><Properties><string name="Name">Main</string><string name="Source"><![CDATA[-- 클라이언트 시작점: UI, 발굴 입력, 서버 알림 처리
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextChatService = game:GetService("TextChatService")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local Economy = require(ReplicatedStorage.Shared.Economy)
+local Util = require(ReplicatedStorage.Shared.Util)
+
+local Client = script.Parent
+local Hud = require(Client.Hud)
+local Panels = require(Client.Panels)
+local Digger = require(Client.Digger)
+local Effects = require(Client.Effects)
+
+local player = Players.LocalPlayer
+local remotes = ReplicatedStorage:WaitForChild("Remotes")
+local actionRemote = remotes:WaitForChild("Action") :: RemoteFunction
+local syncRemote = remotes:WaitForChild("Sync") :: RemoteEvent
+local notifyRemote = remotes:WaitForChild("Notify") :: RemoteEvent
+local effectRemote = remotes:WaitForChild("Effect") :: RemoteEvent
+
+local snapshot: any = nil
+
+local function request(action: string, ...: any)
+	local args = table.pack(...)
+	task.spawn(function()
+		local ok, success, message = pcall(function()
+			return actionRemote:InvokeServer(action, table.unpack(args, 1, args.n))
+		end)
+		if not ok then
+			Hud.Toast("서버와 연결이 불안정해요", Color3.fromRGB(255, 120, 120))
+			return
+		end
+		if type(message) == "string" then
+			Hud.Toast(message, if success then Color3.fromRGB(140, 255, 140) else Color3.fromRGB(255, 140, 140), success == true)
+		end
+	end)
+end
+
+local function updateBadges()
+	if not snapshot then
+		return
+	end
+	local canAssemble = false
+	for speciesId in snapshot.pieces do
+		if Economy.HasAllPieces(snapshot, speciesId) then
+			canAssemble = true
+			break
+		end
+	end
+	Hud.SetBadge("Collection", canAssemble)
+	local canBuy = false
+	for _, def in Config.Tools do
+		if not snapshot.ownedTools[def.id] and snapshot.coins >= def.price then
+			canBuy = true
+			break
+		end
+	end
+	Hud.SetBadge("Shop", canBuy)
+end
+
+local function applySnapshot(newSnapshot: any)
+	if type(newSnapshot) ~= "table" then
+		return
+	end
+	snapshot = newSnapshot
+	Hud.SetCoins(snapshot.coins)
+	Hud.SetIncome(snapshot.income)
+	Panels.Update(snapshot)
+	updateBadges()
+end
+
+----------------------------------------------------------------------
+Hud.Create(function(id: string)
+	if id == "Collection" or id == "Shop" then
+		Panels.Toggle(id)
+	elseif id == "Museum" or id == "Field" then
+		Panels.Close()
+		request("Teleport", id)
+	end
+end)
+Panels.Create(Hud.GetScreen(), request)
+
+Digger.Init(function()
+	return if snapshot then snapshot.cooldown else 0.55
+end, function()
+	Hud.Toast("조금 더 가까이 가서 파세요!", Color3.fromRGB(255, 200, 120))
+end)
+
+syncRemote.OnClientEvent:Connect(applySnapshot)
+
+-- 코인은 자주 바뀌므로 속성으로 받음
+player:GetAttributeChangedSignal("Coins"):Connect(function()
+	local coins = player:GetAttribute("Coins") :: number
+	if coins then
+		Hud.SetCoins(coins)
+		Panels.OnCoins(coins)
+		updateBadges()
+	end
+end)
+
+local function systemMessage(text: string)
+	pcall(function()
+		local channels = TextChatService:FindFirstChild("TextChannels")
+		local general = channels and channels:FindFirstChild("RBXGeneral") :: TextChannel?
+		if general then
+			general:DisplaySystemMessage(text)
+		end
+	end)
+end
+
+notifyRemote.OnClientEvent:Connect(function(payload: any)
+	if type(payload) ~= "table" then
+		return
+	end
+	if payload.kind == "Dig" then
+		Effects.FloatText(payload.position, "+" .. Util.FormatNumber(payload.coins) .. " 💰", Color3.fromRGB(255, 220, 80))
+		if payload.speciesId then
+			local species = Config.SpeciesById[payload.speciesId]
+			local rarity = Config.RarityById[species.rarity]
+			local pieceName = Config.GetPieces(species)[payload.pieceIndex]
+			local text = string.format("[%s] %s · %s", rarity.name, species.name, pieceName)
+			if payload.isNew then
+				text = "✨ NEW! " .. text
+			end
+			Hud.Toast(text, rarity.color, rarity.tier >= 3 or payload.isNew)
+			if payload.complete and payload.isNew then
+				Hud.Toast("🦴 " .. species.name .. " 조각을 모두 모았어요! 📖 도감에서 조립하세요", Color3.fromRGB(140, 255, 140), true, 5)
+			end
+		end
+	elseif payload.kind == "Text" then
+		Hud.Toast(payload.text, payload.color)
+	elseif payload.kind == "Announce" then
+		Hud.Toast(payload.text, payload.color or Color3.fromRGB(255, 220, 120), true, 5)
+		systemMessage(payload.text)
+	elseif payload.kind == "Offline" then
+		Hud.Toast(
+			string.format("🏛️ 자리를 비운 %s 동안 관람객이 💰 %s 코인을 냈어요!", Util.FormatTime(payload.seconds), Util.FormatNumber(payload.coins)),
+			Color3.fromRGB(255, 220, 80),
+			true,
+			7
+		)
+	end
+end)
+
+effectRemote.OnClientEvent:Connect(function(kind: string, position: Vector3, color: Color3, big: boolean)
+	if kind == "Dig" then
+		Effects.DirtBurst(position, color, big)
+	end
+end)
+
+-- 이벤트 배너 / 부스트 타이머
+task.spawn(function()
+	while true do
+		local now = workspace:GetServerTimeNow()
+		if ReplicatedStorage:GetAttribute("MeteorActive") then
+			local endsAt = ReplicatedStorage:GetAttribute("MeteorEndsAt") or now
+			Hud.SetEvent("☄️ 운석 낙하 중! " .. Util.FormatTime(endsAt - now))
+		else
+			local nextAt = ReplicatedStorage:GetAttribute("NextMeteorAt")
+			Hud.SetEvent(if nextAt then "☄️ 다음 운석까지 " .. Util.FormatTime(nextAt - now) else "☄️ 운석 대기 중")
+		end
+		if snapshot then
+			Hud.SetBoost((snapshot.luckBoostUntil or 0) - os.time())
+		end
+		task.wait(0.5)
+	end
+end)
+
+-- 처음 데이터 받아오기 (서버가 아직 불러오는 중이면 재시도)
+task.spawn(function()
+	for _ = 1, 30 do
+		local ok, success, data = pcall(function()
+			return actionRemote:InvokeServer("GetSnapshot")
+		end)
+		if ok and success and data then
+			applySnapshot(data)
+			return
+		end
+		task.wait(1)
+	end
+end)
+
+Hud.Toast("⛏️ 삽을 들고 흙더미를 클릭하세요! 화석 조각을 모아 박물관을 채워요", Color3.fromRGB(255, 230, 160), true, 6)
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000016"><Properties><string name="Name">Panels</string><string name="Source"><![CDATA[-- 도감 / 상점 창
+local MarketplaceService = game:GetService("MarketplaceService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local Economy = require(ReplicatedStorage.Shared.Economy)
+local Util = require(ReplicatedStorage.Shared.Util)
+local Gui = require(script.Parent.Gui)
+
+local Panels = {}
+
+local player = Players.LocalPlayer
+local request: (string, ...any) -> () = function() end
+local snapshot: any = nil
+
+type Panel = { frame: Frame, title: TextLabel, subtitle: TextLabel, list: ScrollingFrame, top: Frame }
+local panels: { [string]: Panel } = {}
+local openId: string? = nil
+
+local function makePanel(screen: ScreenGui, id: string, titleText: string, color: Color3): Panel
+	local frame = Gui.new("Frame", {
+		Name = id,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.52),
+		Size = UDim2.fromScale(0.62, 0.74),
+		BackgroundColor3 = Gui.Colors.Panel,
+		BackgroundTransparency = 0.05,
+		Visible = false,
+		ZIndex = 10,
+		Parent = screen,
+	}, {
+		Gui.corner(16),
+		Gui.stroke(color, 3),
+		Gui.new("UISizeConstraint", { MaxSize = Vector2.new(760, 560), MinSize = Vector2.new(320, 300) }),
+	})
+	local title = Gui.label({
+		Position = UDim2.fromOffset(16, 10),
+		Size = UDim2.new(1, -80, 0, 32),
+		Font = Enum.Font.FredokaOne,
+		TextColor3 = color,
+		Text = titleText,
+		MaxTextSize = 28,
+		ZIndex = 11,
+		Parent = frame,
+	})
+	local subtitle = Gui.label({
+		Position = UDim2.fromOffset(16, 42),
+		Size = UDim2.new(1, -80, 0, 20),
+		TextColor3 = Gui.Colors.SubText,
+		Text = "",
+		MaxTextSize = 15,
+		ZIndex = 11,
+		Parent = frame,
+	})
+	Gui.button({
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -10, 0, 10),
+		Size = UDim2.fromOffset(40, 40),
+		BackgroundColor3 = Gui.Colors.Red,
+		Text = "X",
+		ZIndex = 11,
+		Parent = frame,
+	}, function()
+		Panels.Close()
+	end)
+	local top = Gui.new("Frame", {
+		Position = UDim2.fromOffset(16, 68),
+		Size = UDim2.new(1, -32, 0, 0),
+		BackgroundTransparency = 1,
+		ZIndex = 11,
+		Parent = frame,
+	})
+	local list = Gui.new("ScrollingFrame", {
+		Position = UDim2.fromOffset(12, 70),
+		Size = UDim2.new(1, -24, 1, -82),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 8,
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		CanvasSize = UDim2.new(),
+		ZIndex = 11,
+		Parent = frame,
+	}, {
+		Gui.new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
+		Gui.new("UIPadding", { PaddingRight = UDim.new(0, 10), PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4) }),
+	})
+	local panel = { frame = frame, title = title, subtitle = subtitle, list = list, top = top }
+	panels[id] = panel
+	return panel
+end
+
+local function clearList(panel: Panel)
+	for _, child in panel.list:GetChildren() do
+		if child:IsA("GuiObject") then
+			child:Destroy()
+		end
+	end
+end
+
+local function row(panel: Panel, order: number, height: number, color: Color3?): Frame
+	return Gui.new("Frame", {
+		LayoutOrder = order,
+		Size = UDim2.new(1, 0, 0, height),
+		BackgroundColor3 = Gui.Colors.PanelLight,
+		ZIndex = 12,
+		Parent = panel.list,
+	}, { Gui.corner(10), Gui.stroke(color or Color3.new(0, 0, 0), 1.5) })
+end
+
+local function header(panel: Panel, order: number, text: string, color: Color3)
+	Gui.label({
+		LayoutOrder = order,
+		Size = UDim2.new(1, 0, 0, 28),
+		Font = Enum.Font.FredokaOne,
+		TextColor3 = color,
+		Text = text,
+		MaxTextSize = 22,
+		ZIndex = 12,
+		Parent = panel.list,
+	})
+end
+
+----------------------------------------------------------------------
+-- 도감
+----------------------------------------------------------------------
+local function renderCollection()
+	local panel = panels.Collection
+	clearList(panel)
+	if not snapshot then
+		return
+	end
+
+	local completedKinds = 0
+	for _, count in snapshot.museum do
+		if count > 0 then
+			completedKinds += 1
+		end
+	end
+	local mult = Economy.GetIncomeMultiplier(snapshot, snapshot.passes)
+	panel.subtitle.Text = string.format(
+		"완성 %d/%d종 · 전시 %d/%d칸 · 수입 배수 x%.2f · ❤️ %s",
+		completedKinds,
+		#Config.Species,
+		#Economy.GetDisplayed(snapshot),
+		snapshot.slots,
+		mult,
+		Util.FormatNumber(snapshot.likes)
+	)
+
+	local order = 0
+	local dupValue = Economy.GetDuplicateValue(snapshot)
+	order += 1
+	local sellRow = row(panel, order, 46)
+	Gui.label({
+		Position = UDim2.fromOffset(12, 0),
+		Size = UDim2.new(1, -210, 1, 0),
+		Text = "같은 조각은 1개만 있으면 돼요. 남는 조각은 팔 수 있어요.",
+		TextColor3 = Gui.Colors.SubText,
+		MaxTextSize = 15,
+		ZIndex = 13,
+		Parent = sellRow,
+	})
+	Gui.button({
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -8, 0.5, 0),
+		Size = UDim2.fromOffset(190, 34),
+		BackgroundColor3 = if dupValue > 0 then Gui.Colors.Gold else Gui.Colors.Disabled,
+		TextColor3 = Color3.fromRGB(40, 30, 10),
+		Text = "중복 판매 +" .. Util.FormatNumber(dupValue),
+		ZIndex = 13,
+		Parent = sellRow,
+	}, function()
+		request("SellDuplicates")
+	end)
+
+	for _, rarity in Config.Rarities do
+		local species = Config.SpeciesByRarity[rarity.id] or {}
+		order += 1
+		header(panel, order, string.format("%s%s", rarity.name, if rarity.eventOnly then " (☄️ 운석 이벤트 전용)" else ""), rarity.color)
+		for _, sp in species do
+			order += 1
+			local owned = snapshot.pieces[sp.id] or {}
+			local displayedCount = snapshot.museum[sp.id] or 0
+			local pieces = Config.GetPieces(sp)
+			local have = 0
+			for i = 1, #pieces do
+				if (owned[tostring(i)] or 0) > 0 then
+					have += 1
+				end
+			end
+			local discovered = have > 0 or displayedCount > 0
+			local r = row(panel, order, 74, if have == #pieces then rarity.color else nil)
+
+			Gui.label({
+				Position = UDim2.fromOffset(12, 6),
+				Size = UDim2.new(0.5, -12, 0, 24),
+				Font = Enum.Font.FredokaOne,
+				TextColor3 = if discovered then rarity.color else Gui.Colors.Disabled,
+				Text = if discovered then sp.name else "???",
+				MaxTextSize = 20,
+				ZIndex = 13,
+				Parent = r,
+			})
+			Gui.label({
+				Position = UDim2.new(0.5, 0, 0, 8),
+				Size = UDim2.new(0.5, -150, 0, 20),
+				TextColor3 = Gui.Colors.SubText,
+				TextXAlignment = Enum.TextXAlignment.Right,
+				Text = string.format("%d/%d · 완성 %d개", have, #pieces, displayedCount),
+				MaxTextSize = 15,
+				ZIndex = 13,
+				Parent = r,
+			})
+
+			-- 조각 칸
+			local chips = Gui.new("Frame", {
+				Position = UDim2.fromOffset(12, 36),
+				Size = UDim2.new(1, -160, 0, 30),
+				BackgroundTransparency = 1,
+				ZIndex = 13,
+				Parent = r,
+			}, { Gui.new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4) }) })
+			for i, pieceName in pieces do
+				local count = owned[tostring(i)] or 0
+				local chip = Gui.new("Frame", {
+					Size = UDim2.new(1 / #pieces, -4, 1, 0),
+					BackgroundColor3 = if count > 0 then rarity.color else Color3.fromRGB(35, 30, 26),
+					BackgroundTransparency = if count > 0 then 0.25 else 0,
+					ZIndex = 13,
+					Parent = chips,
+				}, { Gui.corner(6) })
+				Gui.label({
+					Size = UDim2.new(1, -6, 1, -4),
+					Position = UDim2.fromOffset(3, 2),
+					TextXAlignment = Enum.TextXAlignment.Center,
+					TextColor3 = if count > 0 then Color3.new(1, 1, 1) else Gui.Colors.Disabled,
+					TextStrokeTransparency = if count > 0 then 0.4 else 1,
+					Text = if count > 1 then pieceName .. " x" .. count elseif count == 1 then pieceName else "?",
+					MaxTextSize = 14,
+					ZIndex = 14,
+					Parent = chip,
+				})
+			end
+
+			local complete = have == #pieces
+			Gui.button({
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -10, 0.5, 8),
+				Size = UDim2.fromOffset(130, 38),
+				BackgroundColor3 = if complete then Gui.Colors.Green else Gui.Colors.Disabled,
+				Text = if complete then "🦴 조립하기" else string.format("+%s/초", Util.FormatNumber(rarity.income)),
+				AutoButtonColor = complete,
+				ZIndex = 13,
+				Parent = r,
+			}, function()
+				if complete then
+					request("Assemble", sp.id)
+				end
+			end)
+		end
+	end
+end
+
+----------------------------------------------------------------------
+-- 상점
+----------------------------------------------------------------------
+local function renderShop()
+	local panel = panels.Shop
+	clearList(panel)
+	if not snapshot then
+		return
+	end
+	panel.subtitle.Text = string.format("행운 x%.2f · 삽질 간격 %.2f초", snapshot.luck, snapshot.cooldown)
+
+	local order = 1
+	header(panel, order, "⛏️ 발굴 도구", Gui.Colors.Gold)
+	for _, def in Config.Tools do
+		order += 1
+		local owned = snapshot.ownedTools[def.id] == true
+		local equipped = snapshot.tool == def.id
+		local r = row(panel, order, 58, if equipped then Gui.Colors.Gold else nil)
+		Gui.label({
+			Position = UDim2.fromOffset(12, 6),
+			Size = UDim2.new(1, -170, 0, 24),
+			Font = Enum.Font.FredokaOne,
+			TextColor3 = def.color,
+			Text = def.name,
+			MaxTextSize = 20,
+			ZIndex = 13,
+			Parent = r,
+		})
+		Gui.label({
+			Position = UDim2.fromOffset(12, 32),
+			Size = UDim2.new(1, -170, 0, 18),
+			TextColor3 = Gui.Colors.SubText,
+			Text = string.format("파워 %d · 간격 %.2f초 · 행운 +%d%%", def.power, def.cooldown, math.floor(def.luck * 100 + 0.5)),
+			MaxTextSize = 14,
+			ZIndex = 13,
+			Parent = r,
+		})
+		local text, color
+		if equipped then
+			text, color = "사용 중", Gui.Colors.Disabled
+		elseif owned then
+			text, color = "장착", Gui.Colors.Blue
+		else
+			text = "💰 " .. Util.FormatNumber(def.price)
+			color = if snapshot.coins >= def.price then Gui.Colors.Green else Gui.Colors.Disabled
+		end
+		Gui.button({
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -10, 0.5, 0),
+			Size = UDim2.fromOffset(140, 38),
+			BackgroundColor3 = color,
+			Text = text,
+			ZIndex = 13,
+			Parent = r,
+		}, function()
+			if equipped then
+				return
+			elseif owned then
+				request("EquipTool", def.id)
+			else
+				request("BuyTool", def.id)
+			end
+		end)
+	end
+
+	order += 1
+	header(panel, order, "🏛️ 박물관", Gui.Colors.Blue)
+	order += 1
+	local slotRow = row(panel, order, 58)
+	local nextPrice = Economy.GetNextSlotPrice(snapshot)
+	Gui.label({
+		Position = UDim2.fromOffset(12, 6),
+		Size = UDim2.new(1, -170, 0, 24),
+		Font = Enum.Font.FredokaOne,
+		Text = string.format("전시대 %d/%d칸", snapshot.slots, Config.MaxSlots),
+		MaxTextSize = 20,
+		ZIndex = 13,
+		Parent = slotRow,
+	})
+	Gui.label({
+		Position = UDim2.fromOffset(12, 32),
+		Size = UDim2.new(1, -170, 0, 18),
+		TextColor3 = Gui.Colors.SubText,
+		Text = "전시한 화석만 관람 수입을 벌어요",
+		MaxTextSize = 14,
+		ZIndex = 13,
+		Parent = slotRow,
+	})
+	Gui.button({
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -10, 0.5, 0),
+		Size = UDim2.fromOffset(140, 38),
+		BackgroundColor3 = if nextPrice and snapshot.coins >= nextPrice then Gui.Colors.Green else Gui.Colors.Disabled,
+		Text = if nextPrice then "+2칸 💰 " .. Util.FormatNumber(nextPrice) else "최대",
+		ZIndex = 13,
+		Parent = slotRow,
+	}, function()
+		if nextPrice then
+			request("BuySlot")
+		end
+	end)
+
+	order += 1
+	header(panel, order, "💎 Robux 상점", Color3.fromRGB(120, 230, 120))
+	for key, pass in Config.GamePasses do
+		order += 1
+		local r = row(panel, order, 58)
+		local has = snapshot.passes[key] == true
+		Gui.label({ Position = UDim2.fromOffset(12, 6), Size = UDim2.new(1, -170, 0, 24), Font = Enum.Font.FredokaOne, Text = pass.name, MaxTextSize = 20, ZIndex = 13, Parent = r })
+		Gui.label({ Position = UDim2.fromOffset(12, 32), Size = UDim2.new(1, -170, 0, 18), TextColor3 = Gui.Colors.SubText, Text = pass.desc .. " (게임 패스)", MaxTextSize = 14, ZIndex = 13, Parent = r })
+		Gui.button({
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -10, 0.5, 0),
+			Size = UDim2.fromOffset(140, 38),
+			BackgroundColor3 = if has or pass.id == 0 then Gui.Colors.Disabled else Color3.fromRGB(60, 180, 75),
+			Text = if has then "보유 중" elseif pass.id == 0 then "준비 중" else "구매",
+			ZIndex = 13,
+			Parent = r,
+		}, function()
+			if not has and pass.id ~= 0 then
+				MarketplaceService:PromptGamePassPurchase(player, pass.id)
+			end
+		end)
+	end
+	for key, product in Config.Products do
+		order += 1
+		local r = row(panel, order, 58)
+		local desc
+		if key == "LuckBoost" then
+			desc = "행운 x1.5 (중복 구매 시 시간 연장)"
+		else
+			local coins = math.max(product.minCoins or 0, math.floor(snapshot.income * (product.coinsSeconds or 0)))
+			desc = "지금 받으면 💰 " .. Util.FormatNumber(coins)
+		end
+		Gui.label({ Position = UDim2.fromOffset(12, 6), Size = UDim2.new(1, -170, 0, 24), Font = Enum.Font.FredokaOne, Text = product.name, MaxTextSize = 20, ZIndex = 13, Parent = r })
+		Gui.label({ Position = UDim2.fromOffset(12, 32), Size = UDim2.new(1, -170, 0, 18), TextColor3 = Gui.Colors.SubText, Text = desc, MaxTextSize = 14, ZIndex = 13, Parent = r })
+		Gui.button({
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -10, 0.5, 0),
+			Size = UDim2.fromOffset(140, 38),
+			BackgroundColor3 = if product.id == 0 then Gui.Colors.Disabled else Color3.fromRGB(60, 180, 75),
+			Text = if product.id == 0 then "준비 중" else "구매",
+			ZIndex = 13,
+			Parent = r,
+		}, function()
+			if product.id ~= 0 then
+				MarketplaceService:PromptProductPurchase(player, product.id)
+			end
+		end)
+	end
+end
+
+----------------------------------------------------------------------
+local RENDER = {
+	Collection = renderCollection,
+	Shop = renderShop,
+}
+
+function Panels.Create(screen: ScreenGui, requestFn: (string, ...any) -> ())
+	request = requestFn
+	makePanel(screen, "Collection", "📖 화석 도감", Color3.fromRGB(230, 170, 80))
+	makePanel(screen, "Shop", "🛒 상점", Gui.Colors.Green)
+end
+
+function Panels.Toggle(id: string)
+	if openId == id then
+		Panels.Close()
+		return
+	end
+	Panels.Close()
+	local panel = panels[id]
+	if panel then
+		openId = id
+		panel.frame.Visible = true
+		RENDER[id]()
+	end
+end
+
+function Panels.Close()
+	if openId then
+		panels[openId].frame.Visible = false
+	end
+	openId = nil
+end
+
+function Panels.Update(newSnapshot: any)
+	snapshot = newSnapshot
+	if openId then
+		-- 스크롤 위치 유지
+		local list = panels[openId].list
+		local pos = list.CanvasPosition
+		RENDER[openId]()
+		task.defer(function()
+			list.CanvasPosition = pos
+		end)
+	end
+end
+
+-- 코인이 바뀌면 상점 버튼 색만 다시 그리기 위해 전체 갱신 (상점이 열려 있을 때)
+function Panels.OnCoins(coins: number)
+	if snapshot then
+		snapshot.coins = coins
+	end
+end
+
+return Panels
+]]></string></Properties></Item></Item></Item></Item></roblox>
