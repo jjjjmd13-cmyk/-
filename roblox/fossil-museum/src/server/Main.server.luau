@@ -12,6 +12,7 @@ local HelperService = require(Server.HelperService)
 local TradeService = require(Server.TradeService)
 local LeaderboardService = require(Server.LeaderboardService)
 require(Server.QuestService) -- 버튼 요청 처리 등록
+require(Server.DebugService) -- Studio 전용 테스트 명령 (실제 게임에서는 거절)
 
 local world = WorldBuilder.Build()
 Zones.Init(world)

@@ -1,7 +1,11 @@
 -- 랭킹 보드: 완성 화석 수(전체 기간), 이번 주 받은 좋아요
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
 local DataService = require(script.Parent.DataService)
 
 local LeaderboardService = {}
@@ -44,7 +48,9 @@ local function refresh(board: BasePart, storeName: string, getValue: (any) -> nu
 		setBoard(board, "게임을 게시하면 랭킹이 표시돼요")
 		return
 	end
-	for _, player in Players:GetPlayers() do
+	-- Studio 테스트 기록은 실제 랭킹에 올리지 않음 (보기만)
+	local writers = if RunService:IsStudio() then {} else Players:GetPlayers()
+	for _, player in writers do
 		local data = DataService.Get(player)
 		if data then
 			local value = math.floor(getValue(data))
@@ -71,6 +77,12 @@ local function refresh(board: BasePart, storeName: string, getValue: (any) -> nu
 end
 
 function LeaderboardService.Init(world: any)
+	if Config.Features.Leaderboards == false then
+		for _, board in world.boards do
+			setBoard(board, "🔧 점검 중이에요")
+		end
+		return
+	end
 	task.spawn(function()
 		task.wait(10)
 		while true do

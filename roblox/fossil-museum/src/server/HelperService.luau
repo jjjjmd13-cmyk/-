@@ -34,10 +34,14 @@ function HelperService.Refresh(player: Player)
 	if not data then
 		return
 	end
-	player:SetAttribute("Helpers", table.concat(activeHelpers(player, data), ","))
+	local list = if Config.Features.Helpers == false then {} else activeHelpers(player, data)
+	player:SetAttribute("Helpers", table.concat(list, ","))
 end
 
 local function tick()
+	if Config.Features.Helpers == false then
+		return
+	end
 	local now = os.clock()
 	for _, player in Players:GetPlayers() do
 		local data = DataService.Get(player)

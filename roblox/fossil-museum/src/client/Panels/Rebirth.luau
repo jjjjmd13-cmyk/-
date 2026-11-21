@@ -11,6 +11,7 @@ local Rebirth = {
 	title = "🔁 환생",
 	color = Color3.fromRGB(255, 140, 255),
 	tabs = false,
+	feature = "Rebirth",
 }
 
 function Rebirth.render(panel: PanelKit.Panel, snapshot: any, ctx: any)

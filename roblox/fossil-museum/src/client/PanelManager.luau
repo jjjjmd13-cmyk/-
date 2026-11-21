@@ -1,4 +1,8 @@
 -- 창 관리: 열기/닫기, 데이터가 바뀌면 다시 그리기
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Config = require(ReplicatedStorage.Shared.Config)
 local PanelKit = require(script.Parent.PanelKit)
 
 local PanelFolder = script.Parent:WaitForChild("Panels")
@@ -11,6 +15,9 @@ local MODULES = {
 	require(PanelFolder:WaitForChild("Rebirth")),
 	require(PanelFolder:WaitForChild("Trade")),
 }
+if RunService:IsStudio() then
+	table.insert(MODULES, require(PanelFolder:WaitForChild("Debug")))
+end
 
 local PanelManager = {}
 
@@ -28,6 +35,13 @@ local function render(id: string)
 	local list = entry.panel.list
 	local pos = list.CanvasPosition
 	entry.ctx.trade = tradeState
+	local feature = entry.module.feature
+	if feature and Config.Features[feature] == false then
+		PanelKit.Clear(entry.panel)
+		entry.panel.subtitle.Text = ""
+		PanelKit.Note(entry.panel, 1, "🔧 " .. (Config.FeatureNames[feature] or feature) .. " 기능은 지금 점검 중이에요. 곧 돌아올게요!")
+		return
+	end
 	entry.module.render(entry.panel, snapshot, entry.ctx)
 	task.defer(function()
 		list.CanvasPosition = pos

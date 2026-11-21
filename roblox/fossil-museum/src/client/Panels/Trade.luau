@@ -14,6 +14,7 @@ local Trade = {
 	title = "🤝 거래",
 	color = Color3.fromRGB(100, 200, 255),
 	tabs = false,
+	feature = "Trade",
 }
 
 local function pieceLabel(speciesId: string, pieceIndex: number): (string, Color3)

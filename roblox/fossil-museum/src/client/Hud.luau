@@ -1,6 +1,7 @@
 -- 화면 위 정보: 코인, 수입, 이벤트 배너, 메뉴 버튼, 알림
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -123,6 +124,11 @@ function Hud.Create(onMenu: (string) -> ())
 		{ id = "Trade", text = "🤝 거래", color = Color3.fromRGB(70, 160, 200) },
 		{ id = "Museum", text = "🏛️ 박물관", color = Color3.fromRGB(150, 110, 80) },
 	}
+	if RunService:IsStudio() then
+		table.insert(buttons, { id = "Debug", text = "🛠️ 테스트", color = Color3.fromRGB(230, 110, 50) })
+	end
+	local rows = math.ceil(#buttons / 2)
+	menu.Size = UDim2.fromOffset(2 * 108 + 6, rows * 46 + (rows - 1) * 6)
 	for i, info in buttons do
 		local b = Gui.button({
 			Name = info.id,

@@ -12,6 +12,7 @@ local Helpers = {
 	title = "🦖 발굴 조수",
 	color = Color3.fromRGB(120, 210, 100),
 	tabs = false,
+	feature = "Helpers",
 }
 
 function Helpers.render(panel: PanelKit.Panel, snapshot: any, ctx: any)

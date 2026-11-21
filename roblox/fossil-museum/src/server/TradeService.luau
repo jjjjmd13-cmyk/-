@@ -1,7 +1,10 @@
 -- 플레이어끼리 화석 조각 / 코인 거래
 -- 흐름: 요청 → 수락 → 양쪽이 물건 올리기 → 둘 다 "준비" → 서버가 한 번에 교환
 -- 사기 방지: 내용이 바뀌면 준비가 풀리고, 바뀐 뒤 3초 동안은 준비를 누를 수 없음
+local DataStoreService = game:GetService("DataStoreService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -12,6 +15,13 @@ local Net = require(script.Parent.Net)
 local TradeService = {}
 
 local READY_LOCK = 3
+local HISTORY_SIZE = 20
+
+-- 모든 거래 기록 (Creator Dashboard → 데이터 저장소 관리자에서 "TradeLogs_v1" 로 볼 수 있어요)
+local logStore: DataStore? = nil
+pcall(function()
+	logStore = DataStoreService:GetDataStore(if RunService:IsStudio() then "TradeLogs_StudioTest_v1" else "TradeLogs_v1")
+end)
 
 type Offer = { items: { [string]: number }, coins: number }
 type Trade = {
@@ -109,6 +119,44 @@ local function moveItems(fromData: any, toData: any, offer: Offer)
 	end
 end
 
+local function describe(offer: Offer): string
+	local parts = {}
+	if offer.coins > 0 then
+		table.insert(parts, "코인 " .. offer.coins)
+	end
+	for _, item in offerList(offer) do
+		table.insert(parts, string.format("%s#%d x%d", item.speciesId, item.pieceIndex, item.count))
+	end
+	return if #parts > 0 then table.concat(parts, ", ") else "(없음)"
+end
+
+local function remember(data: any, otherPlayer: Player, gave: string, got: string)
+	table.insert(data.tradeHistory, { time = os.time(), with = otherPlayer.UserId, withName = otherPlayer.Name, gave = gave, got = got })
+	while #data.tradeHistory > HISTORY_SIZE do
+		table.remove(data.tradeHistory, 1)
+	end
+end
+
+local function writeLog(a: Player, b: Player, offerA: Offer, offerB: Offer)
+	local gaveA, gaveB = describe(offerA), describe(offerB)
+	print(string.format("[Trade] %s(%d) 줌: %s  ⇄  %s(%d) 줌: %s", a.Name, a.UserId, gaveA, b.Name, b.UserId, gaveB))
+	if not logStore then
+		return
+	end
+	local key = string.format("%d_%s", os.time(), HttpService:GenerateGUID(false):sub(1, 8))
+	local entry = {
+		time = os.time(),
+		server = game.JobId,
+		a = { userId = a.UserId, name = a.Name, gave = gaveA },
+		b = { userId = b.UserId, name = b.Name, gave = gaveB },
+	}
+	task.spawn(function()
+		pcall(function()
+			(logStore :: DataStore):SetAsync(key, entry, { a.UserId, b.UserId })
+		end)
+	end)
+end
+
 local function execute(trade: Trade)
 	local a, b = trade.players[1], trade.players[2]
 	local dataA, dataB = DataService.Get(a), DataService.Get(b)
@@ -122,6 +170,10 @@ local function execute(trade: Trade)
 	end
 	moveItems(dataA, dataB, trade.offers[a])
 	moveItems(dataB, dataA, trade.offers[b])
+	local gaveA, gaveB = describe(trade.offers[a]), describe(trade.offers[b])
+	remember(dataA, b, gaveA, gaveB)
+	remember(dataB, a, gaveB, gaveA)
+	writeLog(a, b, trade.offers[a], trade.offers[b])
 	close(trade, "done")
 	Net.Tell(a, "🤝 " .. b.DisplayName .. "님과 거래 완료!", Color3.fromRGB(140, 255, 140))
 	Net.Tell(b, "🤝 " .. a.DisplayName .. "님과 거래 완료!", Color3.fromRGB(140, 255, 140))
@@ -160,7 +212,7 @@ Net.Handle("TradeRequest", function(player, targetUserId)
 	requests[target] = { from = player, at = now }
 	Net.Trade:FireClient(target, { type = "Request", fromName = player.DisplayName, fromId = player.UserId })
 	return true, target.DisplayName .. "님에게 거래를 요청했어요"
-end)
+end, "Trade")
 
 Net.Handle("TradeRespond", function(player, fromUserId, accept)
 	local request = requests[player]
@@ -190,7 +242,7 @@ Net.Handle("TradeRespond", function(player, fromUserId, accept)
 	trades[player] = trade
 	sendState(trade)
 	return true, nil
-end)
+end, "Trade")
 
 Net.Handle("TradeSetItem", function(player, speciesId, pieceIndex, count)
 	local trade = trades[player]
@@ -224,7 +276,7 @@ Net.Handle("TradeSetItem", function(player, speciesId, pieceIndex, count)
 	end
 	changed(trade)
 	return true, nil
-end)
+end, "Trade")
 
 Net.Handle("TradeSetCoins", function(player, amount)
 	local trade = trades[player]
@@ -236,7 +288,7 @@ Net.Handle("TradeSetCoins", function(player, amount)
 	trade.offers[player].coins = amount
 	changed(trade)
 	return true, "💰 " .. Util.FormatNumber(amount) .. " 코인을 올렸어요"
-end)
+end, "Trade")
 
 Net.Handle("TradeReady", function(player)
 	local trade = trades[player]
@@ -254,7 +306,7 @@ Net.Handle("TradeReady", function(player)
 		sendState(trade)
 	end
 	return true, nil
-end)
+end, "Trade")
 
 Net.Handle("TradeCancel", function(player)
 	local trade = trades[player]

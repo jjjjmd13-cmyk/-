@@ -27,6 +27,30 @@ Config.Products = {
 }
 
 ----------------------------------------------------------------------
+-- 기능 스위치: 문제가 생긴 기능만 false 로 바꾸고 다시 게시하세요.
+-- (Creator Dashboard 에서 "서버 재시작"을 하면 모든 서버에 바로 적용돼요)
+----------------------------------------------------------------------
+Config.Features = {
+	Trade = true, -- 🤝 거래
+	Helpers = true, -- 🦖 발굴 조수
+	Rebirth = true, -- 🔁 환생
+	Meteor = true, -- ☄️ 운석 이벤트
+	Leaderboards = true, -- 🏆 랭킹 보드
+	NpcVisitors = true, -- 🧑 NPC 손님과 손님 좋아요
+	CoopShare = true, -- 🤝 같이 파면 나눠 받기 (false 면 마지막에 친 사람이 전부)
+}
+
+Config.FeatureNames = {
+	Trade = "거래",
+	Helpers = "발굴 조수",
+	Rebirth = "환생",
+	Meteor = "운석 이벤트",
+	Leaderboards = "랭킹",
+	NpcVisitors = "NPC 손님",
+	CoopShare = "같이 파기",
+}
+
+----------------------------------------------------------------------
 -- 희귀도
 ----------------------------------------------------------------------
 export type Rarity = {

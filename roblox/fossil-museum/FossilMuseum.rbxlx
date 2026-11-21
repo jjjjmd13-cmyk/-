@@ -27,6 +27,30 @@ Config.Products = {
 }
 
 ----------------------------------------------------------------------
+-- 기능 스위치: 문제가 생긴 기능만 false 로 바꾸고 다시 게시하세요.
+-- (Creator Dashboard 에서 "서버 재시작"을 하면 모든 서버에 바로 적용돼요)
+----------------------------------------------------------------------
+Config.Features = {
+	Trade = true, -- 🤝 거래
+	Helpers = true, -- 🦖 발굴 조수
+	Rebirth = true, -- 🔁 환생
+	Meteor = true, -- ☄️ 운석 이벤트
+	Leaderboards = true, -- 🏆 랭킹 보드
+	NpcVisitors = true, -- 🧑 NPC 손님과 손님 좋아요
+	CoopShare = true, -- 🤝 같이 파면 나눠 받기 (false 면 마지막에 친 사람이 전부)
+}
+
+Config.FeatureNames = {
+	Trade = "거래",
+	Helpers = "발굴 조수",
+	Rebirth = "환생",
+	Meteor = "운석 이벤트",
+	Leaderboards = "랭킹",
+	NpcVisitors = "NPC 손님",
+	CoopShare = "같이 파기",
+}
+
+----------------------------------------------------------------------
 -- 희귀도
 ----------------------------------------------------------------------
 export type Rarity = {
@@ -695,8 +719,9 @@ function Util.DeepCopy<T>(value: T): T
 end
 
 return Util
-]]></string></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX00000016"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Folder" referent="RBX00000015"><Properties><string name="Name">Server</string></Properties><Item class="ModuleScript" referent="RBX00000006"><Properties><string name="Name">DataService</string><string name="Source"><![CDATA[-- 플레이어 데이터 불러오기 / 저장
+]]></string></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX00000017"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Folder" referent="RBX00000016"><Properties><string name="Name">Server</string></Properties><Item class="ModuleScript" referent="RBX00000006"><Properties><string name="Name">DataService</string><string name="Source"><![CDATA[-- 플레이어 데이터 불러오기 / 저장
 local DataStoreService = game:GetService("DataStoreService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -706,7 +731,8 @@ local Util = require(ReplicatedStorage.Shared.Util)
 
 local DataService = {}
 
-local STORE_NAME = "FossilMuseum_v1"
+-- Studio 테스트는 실제 게임과 다른 저장소를 써요 (테스트 메뉴로 만든 코인이 실제 데이터에 섞이지 않게)
+local STORE_NAME = if RunService:IsStudio() then "FossilMuseum_StudioTest_v1" else "FossilMuseum_v1"
 local AUTOSAVE_INTERVAL = 120
 
 local TEMPLATE = {
@@ -731,11 +757,21 @@ local TEMPLATE = {
 	weekLikes = { week = 0, count = 0 },
 	autoDig = true, -- 자동 발굴 패스가 있을 때 켜짐/꺼짐
 	stats = { dug = 0, found = 0, meteors = 0, helperDug = 0, totalEarned = 0 },
+	tradeHistory = {}, -- 최근 거래 20개 { time, with, gave, got }
 }
+
+-- 저장 형식: { data = 플레이어 데이터, session = { job = 서버 ID, at = 마지막 확인 시각 } | nil }
+-- session 이 있으면 "지금 어떤 서버가 이 데이터를 쓰는 중"이라는 뜻 (세션 잠금).
+-- 같은 계정이 두 서버에서 동시에 저장해서 조각/코인이 복사되는 버그를 막아요.
+local SESSION_TIMEOUT = AUTOSAVE_INTERVAL + 60 -- 이 시간 동안 갱신이 없으면 그 서버가 꺼진 걸로 보고 가져옴
+local LOCK_WAIT = 40 -- 다른 서버가 잠그고 있으면 최대 이 시간 동안 기다림
+
+local SERVER_ID = if game.JobId ~= "" then game.JobId else HttpService:GenerateGUID(false)
 
 type Profile = {
 	data: any,
-	canSave: boolean,
+	canSave: boolean, -- false 면 저장하지 않음 (Studio 임시 데이터, 다른 서버가 가져간 경우)
+	released: boolean,
 }
 
 local profiles: { [Player]: Profile } = {}
@@ -778,26 +814,83 @@ function DataService.Week(): number
 	return (os.time() // 86400 + 3) // 7
 end
 
+-- 예전 형식(데이터 그대로 저장)도 읽을 수 있게
+local function unwrap(record: any): (any, any)
+	if type(record) ~= "table" then
+		return nil, nil
+	end
+	if record.data ~= nil or record.session ~= nil then
+		return record.data, record.session
+	end
+	if record.coins ~= nil then
+		return record, nil -- 예전 형식
+	end
+	return nil, nil
+end
+
+-- 잠금을 잡으면서 불러오기. 반환: ("ok", data) | ("locked", nil) | ("error", 메시지)
+local function tryAcquire(player: Player, steal: boolean): (string, any)
+	local result = "error"
+	local loaded = nil
+	local ok, err = pcall(function()
+		(store :: DataStore):UpdateAsync(keyFor(player), function(record)
+			local data, session = unwrap(record)
+			local now = os.time()
+			if session and session.job ~= SERVER_ID and not steal and now - (session.at or 0) < SESSION_TIMEOUT then
+				result = "locked"
+				return nil -- 바꾸지 않음
+			end
+			result = "ok"
+			loaded = data
+			return { data = data, session = { job = SERVER_ID, at = now } }
+		end)
+	end)
+	if not ok then
+		return "error", tostring(err)
+	end
+	return result, loaded
+end
+
+local function release(player: Player, data: any)
+	pcall(function()
+		(store :: DataStore):UpdateAsync(keyFor(player), function(record)
+			local _, session = unwrap(record)
+			if session and session.job ~= SERVER_ID then
+				return nil -- 이미 다른 서버 것
+			end
+			return { data = data, session = nil }
+		end)
+	end)
+end
+
 local function load(player: Player)
 	local data = nil
 	local failed = false
 
 	if store then
-		for attempt = 1, 3 do
-			local ok, result = pcall(function()
-				return (store :: DataStore):GetAsync(keyFor(player))
-			end)
-			if ok then
-				data = result
-				failed = false
+		local started = os.clock()
+		local errors = 0
+		while true do
+			local elapsed = os.clock() - started
+			local status, value = tryAcquire(player, elapsed >= LOCK_WAIT)
+			if status == "ok" then
+				data = value
 				break
+			elseif status == "locked" then
+				-- 다른 서버가 방금까지 쓰던 중 (보통 서버를 옮길 때). 그 서버가 저장을 끝낼 때까지 기다림
+				task.wait(4)
+			else
+				errors += 1
+				warn(string.format("[DataService] %s 데이터 불러오기 실패 (%d/3): %s", player.Name, errors, tostring(value)))
+				if errors >= 3 or RunService:IsStudio() then
+					failed = true
+					break
+				end
+				task.wait(errors * 1.5)
 			end
-			failed = true
-			warn(string.format("[DataService] %s 데이터 불러오기 실패 (%d/3): %s", player.Name, attempt, tostring(result)))
-			if RunService:IsStudio() then
-				break -- Studio 에서는 기다리지 않고 바로 임시 데이터로 시작
+			if player.Parent == nil then
+				return
 			end
-			task.wait(attempt * 1.5)
 		end
 	else
 		failed = true
@@ -810,15 +903,17 @@ local function load(player: Player)
 	if failed then
 		warn("[DataService] Studio 테스트: 임시 데이터로 시작합니다 (저장 안 됨). 게임 설정 > 보안 > 'Studio에서 API 서비스 사용'을 켜면 저장돼요.")
 	end
-	if player.Parent == nil then
-		return
-	end
-
 	if type(data) ~= "table" then
 		data = Util.DeepCopy(TEMPLATE)
 	end
+	if player.Parent == nil then
+		-- 불러오는 동안 나감: 잡은 잠금을 바로 풂
+		if not failed then
+			release(player, data)
+		end
+		return
+	end
 	reconcile(data, TEMPLATE)
-
 	-- 오래된 좋아요 기록 정리
 	local today = DataService.Today()
 	for target, day in data.likedGiven do
@@ -844,7 +939,7 @@ local function load(player: Player)
 	end
 	data.lastOnline = os.time()
 
-	profiles[player] = { data = data, canSave = not failed }
+	profiles[player] = { data = data, canSave = not failed, released = false }
 	loadedEvent:Fire(player, data, offlineSeconds)
 end
 
@@ -853,21 +948,60 @@ function DataService.Get(player: Player): any
 	return profile and profile.data
 end
 
-function DataService.Save(player: Player): boolean
+-- 저장. releaseLock = true 면 잠금도 풂 (나갈 때)
+function DataService.Save(player: Player, releaseLock: boolean?): boolean
 	local profile = profiles[player]
-	if not profile or not profile.canSave or not store then
+	if not profile or not profile.canSave or profile.released or not store then
 		return false
 	end
 	profile.data.lastOnline = os.time()
+	local stolen = false
 	local ok, err = pcall(function()
-		(store :: DataStore):UpdateAsync(keyFor(player), function()
-			return profile.data
+		(store :: DataStore):UpdateAsync(keyFor(player), function(record)
+			local _, session = unwrap(record)
+			if session and session.job ~= SERVER_ID then
+				-- 다른 서버가 이 계정을 가져감 → 덮어쓰면 복사/손실 버그가 생기므로 저장하지 않음
+				stolen = true
+				return nil
+			end
+			return {
+				data = profile.data,
+				session = if releaseLock then nil else { job = SERVER_ID, at = os.time() },
+			}
 		end)
 	end)
 	if not ok then
 		warn(string.format("[DataService] %s 저장 실패: %s", player.Name, tostring(err)))
+		return false
 	end
-	return ok
+	if stolen then
+		profile.canSave = false
+		warn(string.format("[DataService] %s: 다른 서버에서 접속해서 이 서버의 저장을 멈춰요", player.Name))
+		if player.Parent then
+			player:Kick("다른 서버에서 같은 계정으로 접속했어요.")
+		end
+		return false
+	end
+	if releaseLock then
+		profile.released = true
+	end
+	return true
+end
+
+-- 데이터 전체 초기화 (Studio 테스트 메뉴 전용)
+function DataService.Reset(player: Player): any
+	local profile = profiles[player]
+	if not profile then
+		return nil
+	end
+	local fresh = Util.DeepCopy(TEMPLATE)
+	fresh.lastOnline = os.time()
+	-- 같은 테이블을 계속 쓰는 코드가 있어서 내용만 바꿔치기
+	table.clear(profile.data)
+	for k, v in fresh do
+		profile.data[k] = v
+	end
+	return profile.data
 end
 
 function DataService.Init()
@@ -877,7 +1011,7 @@ function DataService.Init()
 	end
 
 	Players.PlayerRemoving:Connect(function(player)
-		DataService.Save(player)
+		DataService.Save(player, true)
 		profiles[player] = nil
 	end)
 
@@ -895,7 +1029,7 @@ function DataService.Init()
 		for player in profiles do
 			pending += 1
 			task.spawn(function()
-				DataService.Save(player)
+				DataService.Save(player, true)
 				pending -= 1
 			end)
 		end
@@ -907,7 +1041,100 @@ function DataService.Init()
 end
 
 return DataService
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000007"><Properties><string name="Name">DigService</string><string name="Source"><![CDATA[-- 발굴: 흙더미 생성, 삽질 처리, 운석 이벤트, 도구 지급
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000007"><Properties><string name="Name">DebugService</string><string name="Source"><![CDATA[-- 🛠️ Studio 전용 테스트 명령 (실제 게임 서버에서는 전부 거절)
+-- 혼자서 후반 지역, 환생, 운석, 퀘스트까지 빠르게 확인하는 용도
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local DataService = require(script.Parent.DataService)
+local Net = require(script.Parent.Net)
+local DigService = require(script.Parent.DigService)
+local Zones = require(script.Parent.Zones)
+
+local DebugService = {}
+
+local COMMANDS: { [string]: (Player, any) -> string } = {
+	Coins = function(_, data)
+		data.coins += 100000000
+		return "💰 +1억 코인"
+	end,
+	CoinsHuge = function(_, data)
+		data.coins += 1000000000000
+		return "💰 +1조 코인"
+	end,
+	Zones = function(_, data)
+		for _, zone in Config.Zones do
+			data.unlockedZones[zone.id] = true
+		end
+		return "🗺️ 모든 지역 열림"
+	end,
+	Meteor = function()
+		DigService.StartMeteorNow()
+		return "☄️ 운석이 곧 떨어져요"
+	end,
+	Pieces = function(_, data)
+		for _, species in Config.Species do
+			local owned = data.pieces[species.id]
+			if not owned then
+				owned = {}
+				data.pieces[species.id] = owned
+			end
+			for i = 1, #Config.GetPieces(species) do
+				owned[tostring(i)] = (owned[tostring(i)] or 0) + 1
+			end
+		end
+		return "🦴 모든 화석 조각 +1개씩 (도감에서 조립해 보세요)"
+	end,
+	Luck = function(_, data)
+		data.luckBoostUntil = math.max(data.luckBoostUntil, os.time()) + 15 * 60
+		return "🍀 행운 부스트 15분"
+	end,
+	Quests = function(_, data)
+		for _, quest in data.quests.list do
+			quest.progress = quest.target
+		end
+		return "📜 오늘 퀘스트 모두 완료 상태 (보상 받기를 눌러 보세요)"
+	end,
+	NewDay = function(_, data)
+		data.daily.last = DataService.Today() - 1
+		data.quests.day = 0
+		data.likedGiven = {}
+		return "📅 하루가 지난 것처럼: 매일 보상, 퀘스트, 좋아요 초기화 (퀘스트 창을 다시 열어 보세요)"
+	end,
+	Likes = function(_, data)
+		data.likes += 10
+		data.npcLikes += 50
+		return "❤️ 좋아요 +10, 🧑 손님 좋아요 +50"
+	end,
+	Reset = function(player)
+		DataService.Reset(player)
+		DigService.GiveTool(player)
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local desert = Zones.Get("Desert")
+		if root and desert then
+			root.CFrame = desert.spawn
+		end
+		return "🧹 데이터를 처음 상태로 초기화했어요"
+	end,
+}
+
+Net.Handle("Debug", function(player, command)
+	if not RunService:IsStudio() then
+		return false, "테스트 메뉴는 Studio 에서만 쓸 수 있어요"
+	end
+	local fn = type(command) == "string" and COMMANDS[command]
+	if not fn then
+		return false, "없는 명령이에요"
+	end
+	local data = DataService.Get(player)
+	local message = fn(player, data)
+	Net.MarkDirty(player)
+	return true, "🛠️ " .. message
+end)
+
+return DebugService
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">DigService</string><string name="Source"><![CDATA[-- 발굴: 흙더미 생성, 삽질 처리, 운석 이벤트, 도구 지급
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -936,7 +1163,7 @@ local lastLockedWarn: { [Player]: number } = {}
 local contributions: { [BasePart]: { [Player]: number } } = {}
 
 -- 흙더미가 부서졌을 때 판 사람 모두에게 판 만큼 보상 (2명 이상이면 보너스)
-local function rewardContributors(mound: BasePart, kindId: string, zoneId: string)
+local function rewardContributors(mound: BasePart, kindId: string, zoneId: string, lastHitter: Player?)
 	local list = contributions[mound] or {}
 	contributions[mound] = nil
 	local total = 0
@@ -948,6 +1175,14 @@ local function rewardContributors(mound: BasePart, kindId: string, zoneId: strin
 		end
 	end
 	if total <= 0 then
+		return
+	end
+	if Config.Features.CoopShare == false then
+		-- 예전 방식: 마지막에 친 사람이 전부
+		local data = lastHitter and lastHitter.Parent and DataService.Get(lastHitter)
+		if data and lastHitter then
+			Rewards.Dig(lastHitter, data, kindId, zoneId, mound.Position)
+		end
 		return
 	end
 	local coop = count >= 2
@@ -1210,7 +1445,7 @@ local function onDig(player: Player, mound: any)
 	end
 
 	hideMound(mound)
-	rewardContributors(mound, kindId, zoneId)
+	rewardContributors(mound, kindId, zoneId, player)
 	if kindId == "Meteor" then
 		task.delay(1, function()
 			mound:Destroy()
@@ -1271,7 +1506,18 @@ local function spawnMeteor(zoneWorld: any)
 	CollectionService:AddTag(meteor, TAG)
 end
 
+local forceMeteor = false
+
+-- Studio 테스트 메뉴: 다음 운석을 바로 시작
+function DigService.StartMeteorNow()
+	forceMeteor = true
+end
+
 local function meteorLoop()
+	if Config.Features.Meteor == false then
+		ReplicatedStorage:SetAttribute("MeteorActive", false)
+		return
+	end
 	local first = true
 	while true do
 		local waitTime = Config.MeteorInterval
@@ -1280,8 +1526,12 @@ local function meteorLoop()
 		end
 		first = false
 		ReplicatedStorage:SetAttribute("MeteorActive", false)
-		ReplicatedStorage:SetAttribute("NextMeteorAt", workspace:GetServerTimeNow() + waitTime)
-		task.wait(waitTime)
+		local startAt = workspace:GetServerTimeNow() + waitTime
+		ReplicatedStorage:SetAttribute("NextMeteorAt", startAt)
+		while workspace:GetServerTimeNow() < startAt and not forceMeteor do
+			task.wait(0.5)
+		end
+		forceMeteor = false
 
 		ReplicatedStorage:SetAttribute("MeteorActive", true)
 		ReplicatedStorage:SetAttribute("MeteorEndsAt", workspace:GetServerTimeNow() + Config.MeteorDuration)
@@ -1351,7 +1601,7 @@ function DigService.Init(builtWorld: any)
 end
 
 return DigService
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">FossilModel</string><string name="Source"><![CDATA[-- 완성 화석의 3D 뼈대 모형을 파트로 만들어 줌 (에셋 없이 동작)
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000009"><Properties><string name="Name">FossilModel</string><string name="Source"><![CDATA[-- 완성 화석의 3D 뼈대 모형을 파트로 만들어 줌 (에셋 없이 동작)
 -- 모형은 로컬 +X 방향이 머리, 원점은 전시대 윗면 중앙입니다.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -1679,7 +1929,7 @@ function FossilModel.Build(speciesId: string, base: CFrame): Model?
 end
 
 return FossilModel
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000009"><Properties><string name="Name">HelperService</string><string name="Source"><![CDATA[-- 발굴 조수: 데리고 다니면 플레이어가 서 있는 지역에서 자동으로 흙더미를 팜
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000A"><Properties><string name="Name">HelperService</string><string name="Source"><![CDATA[-- 발굴 조수: 데리고 다니면 플레이어가 서 있는 지역에서 자동으로 흙더미를 팜
 -- 조수 모형은 각 클라이언트가 플레이어의 "Helpers" 속성을 보고 그림 (서버 부담 없음)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1715,10 +1965,14 @@ function HelperService.Refresh(player: Player)
 	if not data then
 		return
 	end
-	player:SetAttribute("Helpers", table.concat(activeHelpers(player, data), ","))
+	local list = if Config.Features.Helpers == false then {} else activeHelpers(player, data)
+	player:SetAttribute("Helpers", table.concat(list, ","))
 end
 
 local function tick()
+	if Config.Features.Helpers == false then
+		return
+	end
 	local now = os.clock()
 	for _, player in Players:GetPlayers() do
 		local data = DataService.Get(player)
@@ -1768,10 +2022,14 @@ function HelperService.Init()
 end
 
 return HelperService
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000A"><Properties><string name="Name">LeaderboardService</string><string name="Source"><![CDATA[-- 랭킹 보드: 완성 화석 수(전체 기간), 이번 주 받은 좋아요
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000B"><Properties><string name="Name">LeaderboardService</string><string name="Source"><![CDATA[-- 랭킹 보드: 완성 화석 수(전체 기간), 이번 주 받은 좋아요
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
 local DataService = require(script.Parent.DataService)
 
 local LeaderboardService = {}
@@ -1814,7 +2072,9 @@ local function refresh(board: BasePart, storeName: string, getValue: (any) -> nu
 		setBoard(board, "게임을 게시하면 랭킹이 표시돼요")
 		return
 	end
-	for _, player in Players:GetPlayers() do
+	-- Studio 테스트 기록은 실제 랭킹에 올리지 않음 (보기만)
+	local writers = if RunService:IsStudio() then {} else Players:GetPlayers()
+	for _, player in writers do
 		local data = DataService.Get(player)
 		if data then
 			local value = math.floor(getValue(data))
@@ -1841,6 +2101,12 @@ local function refresh(board: BasePart, storeName: string, getValue: (any) -> nu
 end
 
 function LeaderboardService.Init(world: any)
+	if Config.Features.Leaderboards == false then
+		for _, board in world.boards do
+			setBoard(board, "🔧 점검 중이에요")
+		end
+		return
+	end
 	task.spawn(function()
 		task.wait(10)
 		while true do
@@ -1859,7 +2125,7 @@ function LeaderboardService.Init(world: any)
 end
 
 return LeaderboardService
-]]></string></Properties></Item><Item class="Script" referent="RBX0000000B"><Properties><string name="Name">Main</string><string name="Source"><![CDATA[-- 서버 시작점
+]]></string></Properties></Item><Item class="Script" referent="RBX0000000C"><Properties><string name="Name">Main</string><string name="Source"><![CDATA[-- 서버 시작점
 local Server = script.Parent
 local WorldBuilder = require(Server.WorldBuilder)
 local DataService = require(Server.DataService)
@@ -1873,6 +2139,7 @@ local HelperService = require(Server.HelperService)
 local TradeService = require(Server.TradeService)
 local LeaderboardService = require(Server.LeaderboardService)
 require(Server.QuestService) -- 버튼 요청 처리 등록
+require(Server.DebugService) -- Studio 전용 테스트 명령 (실제 게임에서는 거절)
 
 local world = WorldBuilder.Build()
 Zones.Init(world)
@@ -1892,7 +2159,7 @@ LeaderboardService.Init(world)
 DataService.Init()
 
 print("[FossilMuseum] 서버 준비 완료")
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000C"><Properties><string name="Name">MuseumService</string><string name="Source"><![CDATA[-- 박물관: 부지 배정, 화석 전시, 수입, 좋아요, 조립/판매
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000D"><Properties><string name="Name">MuseumService</string><string name="Source"><![CDATA[-- 박물관: 부지 배정, 화석 전시, 수입, 좋아요, 조립/판매
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -1934,7 +2201,7 @@ local function updateSign(plot: Model, player: Player?, data: any?)
 	if player and data then
 		setText(plot:FindFirstChild("Sign"), "Title", player.DisplayName .. "의 박물관")
 		setText(plot:FindFirstChild("LikeStand"), "Likes", "❤️ " .. Util.FormatNumber(data.likes) .. "\n🧑 " .. Util.FormatNumber(data.npcLikes))
-		plot:SetAttribute("Appeal", Economy.GetAppeal(data))
+		plot:SetAttribute("Appeal", if Config.Features.NpcVisitors == false then 0 else Economy.GetAppeal(data))
 		plot:SetAttribute("Displayed", math.min(#Economy.GetDisplayed(data), data.slots))
 	else
 		setText(plot:FindFirstChild("Sign"), "Title", "빈 박물관")
@@ -2218,7 +2485,8 @@ function MuseumService.Init(builtWorld: any)
 	task.spawn(function()
 		while true do
 			task.wait(Config.NpcLikeInterval)
-			for player, plot in playerPlot do
+			local targets = if Config.Features.NpcVisitors == false then {} else playerPlot
+			for player, plot in targets do
 				local data = DataService.Get(player)
 				if data then
 					local appeal = Economy.GetAppeal(data)
@@ -2256,10 +2524,11 @@ function MuseumService.Init(builtWorld: any)
 end
 
 return MuseumService
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000D"><Properties><string name="Name">Net</string><string name="Source"><![CDATA[-- 클라이언트와 통신: 리모트 생성, 알림, 데이터 동기화
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000E"><Properties><string name="Name">Net</string><string name="Source"><![CDATA[-- 클라이언트와 통신: 리모트 생성, 알림, 데이터 동기화
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Config = require(ReplicatedStorage.Shared.Config)
 local Economy = require(ReplicatedStorage.Shared.Economy)
 local DataService = require(script.Parent.DataService)
 local Passes = require(script.Parent.Passes)
@@ -2291,9 +2560,15 @@ Net.Changed = changedEvent.Event -- (player) 데이터 구조가 바뀜 (조각,
 local handlers: { [string]: (Player, ...any) -> any } = {}
 local lastCalls: { [Player]: { number } } = {}
 
+local features: { [string]: string } = {} -- [action] = 기능 이름
+
 -- 버튼 요청 처리 함수 등록. 반환값: (성공 여부, 메시지)
-function Net.Handle(action: string, fn: (Player, ...any) -> any)
+-- feature 를 주면 Config.Features[feature] 가 false 일 때 "점검 중"으로 거절
+function Net.Handle(action: string, fn: (Player, ...any) -> any, feature: string?)
 	handlers[action] = fn
+	if feature then
+		features[action] = feature
+	end
 end
 
 Net.Action.OnServerInvoke = function(player: Player, action: any, ...: any)
@@ -2314,6 +2589,10 @@ Net.Action.OnServerInvoke = function(player: Player, action: any, ...: any)
 
 	if not DataService.Get(player) then
 		return false, "데이터를 불러오는 중이에요"
+	end
+	local feature = features[action]
+	if feature and Config.Features[feature] == false then
+		return false, "🔧 " .. (Config.FeatureNames[feature] or feature) .. " 기능은 지금 점검 중이에요"
 	end
 	local ok, success, message = pcall(handlers[action], player, ...)
 	if not ok then
@@ -2408,7 +2687,7 @@ Net.Handle("GetSnapshot", function(player)
 end)
 
 return Net
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000E"><Properties><string name="Name">Passes</string><string name="Source"><![CDATA[-- 게임 패스 보유 여부 (접속 시 확인하고 기억)
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000F"><Properties><string name="Name">Passes</string><string name="Source"><![CDATA[-- 게임 패스 보유 여부 (접속 시 확인하고 기억)
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -2469,7 +2748,7 @@ function Passes.Init()
 end
 
 return Passes
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000000F"><Properties><string name="Name">QuestService</string><string name="Source"><![CDATA[-- 일일 퀘스트 + 매일 접속 보상
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000010"><Properties><string name="Name">QuestService</string><string name="Source"><![CDATA[-- 일일 퀘스트 + 매일 접속 보상
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -2634,7 +2913,7 @@ function QuestService.OnLoaded(player: Player, data: any)
 end
 
 return QuestService
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000010"><Properties><string name="Name">Rewards</string><string name="Source"><![CDATA[-- 흙더미를 부쉈을 때 보상 (플레이어 삽질 + 조수 자동 발굴 공통)
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000011"><Properties><string name="Name">Rewards</string><string name="Source"><![CDATA[-- 흙더미를 부쉈을 때 보상 (플레이어 삽질 + 조수 자동 발굴 공통)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -2723,7 +3002,7 @@ function Rewards.Dig(player: Player, data: any, kindId: string, zoneId: string, 
 end
 
 return Rewards
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000011"><Properties><string name="Name">ShopService</string><string name="Source"><![CDATA[-- 상점: 코인으로 도구/전시대 구매, Robux 개발자 상품 처리
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">ShopService</string><string name="Source"><![CDATA[-- 상점: 코인으로 도구/전시대 구매, Robux 개발자 상품 처리
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -2835,7 +3114,7 @@ Net.Handle("BuyHelper", function(player, helperId)
 	end
 	Net.MarkDirty(player)
 	return true, "🦖 " .. helper.name .. " 고용 완료!"
-end)
+end, "Helpers")
 
 Net.Handle("EquipHelper", function(player, helperId)
 	local data = DataService.Get(player)
@@ -2852,7 +3131,7 @@ Net.Handle("EquipHelper", function(player, helperId)
 	table.insert(data.helpersEquipped, helper.id)
 	Net.MarkDirty(player)
 	return true, nil
-end)
+end, "Helpers")
 
 Net.Handle("UnequipHelper", function(player, helperId)
 	local data = DataService.Get(player)
@@ -2890,7 +3169,7 @@ Net.Handle("Rebirth", function(player)
 	Net.MarkDirty(player)
 	Net.Announce(string.format("🔁 %s님이 %d번째 환생을 했어요!", player.DisplayName, data.rebirths), Color3.fromRGB(255, 160, 255))
 	return true, string.format("🔁 환생 완료! 수입 +%d%%, 코인 +%d%%, 행운 +%d%%", math.floor(data.rebirths * Config.Rebirth.incomeBonus * 100), math.floor(data.rebirths * Config.Rebirth.coinBonus * 100), math.floor(data.rebirths * Config.Rebirth.luckBonus * 100 + 0.5))
-end)
+end, "Rebirth")
 
 Net.Handle("ToggleAutoDig", function(player)
 	local data = DataService.Get(player)
@@ -2958,10 +3237,13 @@ function ShopService.Init()
 end
 
 return ShopService
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">TradeService</string><string name="Source"><![CDATA[-- 플레이어끼리 화석 조각 / 코인 거래
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000013"><Properties><string name="Name">TradeService</string><string name="Source"><![CDATA[-- 플레이어끼리 화석 조각 / 코인 거래
 -- 흐름: 요청 → 수락 → 양쪽이 물건 올리기 → 둘 다 "준비" → 서버가 한 번에 교환
 -- 사기 방지: 내용이 바뀌면 준비가 풀리고, 바뀐 뒤 3초 동안은 준비를 누를 수 없음
+local DataStoreService = game:GetService("DataStoreService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -2972,6 +3254,13 @@ local Net = require(script.Parent.Net)
 local TradeService = {}
 
 local READY_LOCK = 3
+local HISTORY_SIZE = 20
+
+-- 모든 거래 기록 (Creator Dashboard → 데이터 저장소 관리자에서 "TradeLogs_v1" 로 볼 수 있어요)
+local logStore: DataStore? = nil
+pcall(function()
+	logStore = DataStoreService:GetDataStore(if RunService:IsStudio() then "TradeLogs_StudioTest_v1" else "TradeLogs_v1")
+end)
 
 type Offer = { items: { [string]: number }, coins: number }
 type Trade = {
@@ -3069,6 +3358,44 @@ local function moveItems(fromData: any, toData: any, offer: Offer)
 	end
 end
 
+local function describe(offer: Offer): string
+	local parts = {}
+	if offer.coins > 0 then
+		table.insert(parts, "코인 " .. offer.coins)
+	end
+	for _, item in offerList(offer) do
+		table.insert(parts, string.format("%s#%d x%d", item.speciesId, item.pieceIndex, item.count))
+	end
+	return if #parts > 0 then table.concat(parts, ", ") else "(없음)"
+end
+
+local function remember(data: any, otherPlayer: Player, gave: string, got: string)
+	table.insert(data.tradeHistory, { time = os.time(), with = otherPlayer.UserId, withName = otherPlayer.Name, gave = gave, got = got })
+	while #data.tradeHistory > HISTORY_SIZE do
+		table.remove(data.tradeHistory, 1)
+	end
+end
+
+local function writeLog(a: Player, b: Player, offerA: Offer, offerB: Offer)
+	local gaveA, gaveB = describe(offerA), describe(offerB)
+	print(string.format("[Trade] %s(%d) 줌: %s  ⇄  %s(%d) 줌: %s", a.Name, a.UserId, gaveA, b.Name, b.UserId, gaveB))
+	if not logStore then
+		return
+	end
+	local key = string.format("%d_%s", os.time(), HttpService:GenerateGUID(false):sub(1, 8))
+	local entry = {
+		time = os.time(),
+		server = game.JobId,
+		a = { userId = a.UserId, name = a.Name, gave = gaveA },
+		b = { userId = b.UserId, name = b.Name, gave = gaveB },
+	}
+	task.spawn(function()
+		pcall(function()
+			(logStore :: DataStore):SetAsync(key, entry, { a.UserId, b.UserId })
+		end)
+	end)
+end
+
 local function execute(trade: Trade)
 	local a, b = trade.players[1], trade.players[2]
 	local dataA, dataB = DataService.Get(a), DataService.Get(b)
@@ -3082,6 +3409,10 @@ local function execute(trade: Trade)
 	end
 	moveItems(dataA, dataB, trade.offers[a])
 	moveItems(dataB, dataA, trade.offers[b])
+	local gaveA, gaveB = describe(trade.offers[a]), describe(trade.offers[b])
+	remember(dataA, b, gaveA, gaveB)
+	remember(dataB, a, gaveB, gaveA)
+	writeLog(a, b, trade.offers[a], trade.offers[b])
 	close(trade, "done")
 	Net.Tell(a, "🤝 " .. b.DisplayName .. "님과 거래 완료!", Color3.fromRGB(140, 255, 140))
 	Net.Tell(b, "🤝 " .. a.DisplayName .. "님과 거래 완료!", Color3.fromRGB(140, 255, 140))
@@ -3120,7 +3451,7 @@ Net.Handle("TradeRequest", function(player, targetUserId)
 	requests[target] = { from = player, at = now }
 	Net.Trade:FireClient(target, { type = "Request", fromName = player.DisplayName, fromId = player.UserId })
 	return true, target.DisplayName .. "님에게 거래를 요청했어요"
-end)
+end, "Trade")
 
 Net.Handle("TradeRespond", function(player, fromUserId, accept)
 	local request = requests[player]
@@ -3150,7 +3481,7 @@ Net.Handle("TradeRespond", function(player, fromUserId, accept)
 	trades[player] = trade
 	sendState(trade)
 	return true, nil
-end)
+end, "Trade")
 
 Net.Handle("TradeSetItem", function(player, speciesId, pieceIndex, count)
 	local trade = trades[player]
@@ -3184,7 +3515,7 @@ Net.Handle("TradeSetItem", function(player, speciesId, pieceIndex, count)
 	end
 	changed(trade)
 	return true, nil
-end)
+end, "Trade")
 
 Net.Handle("TradeSetCoins", function(player, amount)
 	local trade = trades[player]
@@ -3196,7 +3527,7 @@ Net.Handle("TradeSetCoins", function(player, amount)
 	trade.offers[player].coins = amount
 	changed(trade)
 	return true, "💰 " .. Util.FormatNumber(amount) .. " 코인을 올렸어요"
-end)
+end, "Trade")
 
 Net.Handle("TradeReady", function(player)
 	local trade = trades[player]
@@ -3214,7 +3545,7 @@ Net.Handle("TradeReady", function(player)
 		sendState(trade)
 	end
 	return true, nil
-end)
+end, "Trade")
 
 Net.Handle("TradeCancel", function(player)
 	local trade = trades[player]
@@ -3236,7 +3567,7 @@ function TradeService.Init()
 end
 
 return TradeService
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000013"><Properties><string name="Name">WorldBuilder</string><string name="Source"><![CDATA[-- 맵 자동 생성: 땅, 발굴 지역 4곳, 박물관 부지 8개, 랭킹 보드
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000014"><Properties><string name="Name">WorldBuilder</string><string name="Source"><![CDATA[-- 맵 자동 생성: 땅, 발굴 지역 4곳, 박물관 부지 8개, 랭킹 보드
 -- 맵을 직접 꾸미고 싶다면 숫자/색을 바꾸거나, 생성된 파트 주변에 장식을 추가하세요.
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -3648,7 +3979,7 @@ function WorldBuilder.Build(): World
 end
 
 return WorldBuilder
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000014"><Properties><string name="Name">Zones</string><string name="Source"><![CDATA[-- 발굴 지역: 위치로 지역 찾기, 잠금 확인
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000015"><Properties><string name="Name">Zones</string><string name="Source"><![CDATA[-- 발굴 지역: 위치로 지역 찾기, 잠금 확인
 local Zones = {}
 
 local world: any = nil
@@ -3689,7 +4020,7 @@ function Zones.IsUnlocked(data: any, zoneId: string): boolean
 end
 
 return Zones
-]]></string></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX0000002C"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX0000002B"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="Folder" referent="RBX0000002A"><Properties><string name="Name">Client</string></Properties><Item class="ModuleScript" referent="RBX00000017"><Properties><string name="Name">Barriers</string><string name="Source"><![CDATA[-- 잠긴 지역의 벽: 내 화면에서만 단단하게 (열린 지역은 투명해지고 통과 가능)
+]]></string></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX0000002E"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX0000002D"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="Folder" referent="RBX0000002C"><Properties><string name="Name">Client</string></Properties><Item class="ModuleScript" referent="RBX00000018"><Properties><string name="Name">Barriers</string><string name="Source"><![CDATA[-- 잠긴 지역의 벽: 내 화면에서만 단단하게 (열린 지역은 투명해지고 통과 가능)
 -- 캐릭터 물리는 내 컴퓨터가 계산하므로, 여기서 CanCollide 를 바꾸면 나에게만 적용돼요.
 local Barriers = {}
 
@@ -3738,7 +4069,7 @@ workspace.DescendantAdded:Connect(function(inst)
 end)
 
 return Barriers
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000018"><Properties><string name="Name">BonePop</string><string name="Source"><![CDATA[-- 화석 조각 발견 연출: 땅에서 뼈가 튀어나와 → 빙글빙글 돌다가 → 주운 사람에게 날아감
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000019"><Properties><string name="Name">BonePop</string><string name="Source"><![CDATA[-- 화석 조각 발견 연출: 땅에서 뼈가 튀어나와 → 빙글빙글 돌다가 → 주운 사람에게 날아감
 -- 조각 종류(두개골, 척추, 다리...)마다 모양이 다르고, 등급이 높을수록 화려해요.
 -- 전설 이상은 하늘로 빛기둥이 솟아서 주변 사람도 볼 수 있어요.
 local Players = game:GetService("Players")
@@ -4108,7 +4439,7 @@ function BonePop.Play(position: Vector3, speciesId: string, pieceIndex: number, 
 end
 
 return BonePop
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000019"><Properties><string name="Name">Digger</string><string name="Source"><![CDATA[-- 삽을 들고 클릭/터치(누르고 있기)하면 흙더미를 팜
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000001A"><Properties><string name="Name">Digger</string><string name="Source"><![CDATA[-- 삽을 들고 클릭/터치(누르고 있기)하면 흙더미를 팜
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -4298,7 +4629,7 @@ function Digger.Init(cooldownFn: () -> number, tooFarFn: () -> (), autoFn: () ->
 end
 
 return Digger
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000001A"><Properties><string name="Name">Effects</string><string name="Source"><![CDATA[-- 흙 튀기기, 코인 숫자 떠오르기 같은 연출 (내 화면에서만)
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000001B"><Properties><string name="Name">Effects</string><string name="Source"><![CDATA[-- 흙 튀기기, 코인 숫자 떠오르기 같은 연출 (내 화면에서만)
 local Debris = game:GetService("Debris")
 local TweenService = game:GetService("TweenService")
 
@@ -4358,7 +4689,7 @@ function Effects.FloatText(position: Vector3, text: string, color: Color3)
 end
 
 return Effects
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000001B"><Properties><string name="Name">Gui</string><string name="Source"><![CDATA[-- UI 만들기 도우미
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000001C"><Properties><string name="Name">Gui</string><string name="Source"><![CDATA[-- UI 만들기 도우미
 local Gui = {}
 
 Gui.Colors = {
@@ -4459,7 +4790,7 @@ function Gui.button(props: { [string]: any }, onClick: () -> ()): TextButton
 end
 
 return Gui
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000001C"><Properties><string name="Name">HelperVisuals</string><string name="Source"><![CDATA[-- 발굴 조수 모형: 모든 플레이어의 조수를 내 화면에 그림 (서버 부담 없음)
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000001D"><Properties><string name="Name">HelperVisuals</string><string name="Source"><![CDATA[-- 발굴 조수 모형: 모든 플레이어의 조수를 내 화면에 그림 (서버 부담 없음)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -4613,9 +4944,10 @@ function HelperVisuals.Init()
 end
 
 return HelperVisuals
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000001D"><Properties><string name="Name">Hud</string><string name="Source"><![CDATA[-- 화면 위 정보: 코인, 수입, 이벤트 배너, 메뉴 버튼, 알림
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000001E"><Properties><string name="Name">Hud</string><string name="Source"><![CDATA[-- 화면 위 정보: 코인, 수입, 이벤트 배너, 메뉴 버튼, 알림
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -4738,6 +5070,11 @@ function Hud.Create(onMenu: (string) -> ())
 		{ id = "Trade", text = "🤝 거래", color = Color3.fromRGB(70, 160, 200) },
 		{ id = "Museum", text = "🏛️ 박물관", color = Color3.fromRGB(150, 110, 80) },
 	}
+	if RunService:IsStudio() then
+		table.insert(buttons, { id = "Debug", text = "🛠️ 테스트", color = Color3.fromRGB(230, 110, 50) })
+	end
+	local rows = math.ceil(#buttons / 2)
+	menu.Size = UDim2.fromOffset(2 * 108 + 6, rows * 46 + (rows - 1) * 6)
 	for i, info in buttons do
 		local b = Gui.button({
 			Name = info.id,
@@ -4914,7 +5251,7 @@ function Hud.Toast(text: string, color: Color3?, big: boolean?, duration: number
 end
 
 return Hud
-]]></string></Properties></Item><Item class="LocalScript" referent="RBX0000001E"><Properties><string name="Name">Main</string><string name="Source"><![CDATA[-- 클라이언트 시작점: UI, 발굴 입력, 서버 알림 처리
+]]></string></Properties></Item><Item class="LocalScript" referent="RBX0000001F"><Properties><string name="Name">Main</string><string name="Source"><![CDATA[-- 클라이언트 시작점: UI, 발굴 입력, 서버 알림 처리
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
@@ -5217,7 +5554,7 @@ task.spawn(function()
 end)
 
 Hud.Toast("⛏️ 삽을 들고 흙더미를 클릭하세요! 화석 조각을 모아 박물관을 채워요", Color3.fromRGB(255, 230, 160), true, 6)
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">PanelKit</string><string name="Source"><![CDATA[-- 창(패널) 공통 부품: 틀, 탭, 목록 줄, 버튼
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">PanelKit</string><string name="Source"><![CDATA[-- 창(패널) 공통 부품: 틀, 탭, 목록 줄, 버튼
 local Gui = require(script.Parent.Gui)
 
 local PanelKit = {}
@@ -5408,7 +5745,11 @@ function PanelKit.RowButton(row: Frame, text: string, color: Color3, onClick: ()
 end
 
 return PanelKit
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">PanelManager</string><string name="Source"><![CDATA[-- 창 관리: 열기/닫기, 데이터가 바뀌면 다시 그리기
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">PanelManager</string><string name="Source"><![CDATA[-- 창 관리: 열기/닫기, 데이터가 바뀌면 다시 그리기
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Config = require(ReplicatedStorage.Shared.Config)
 local PanelKit = require(script.Parent.PanelKit)
 
 local PanelFolder = script.Parent:WaitForChild("Panels")
@@ -5421,6 +5762,9 @@ local MODULES = {
 	require(PanelFolder:WaitForChild("Rebirth")),
 	require(PanelFolder:WaitForChild("Trade")),
 }
+if RunService:IsStudio() then
+	table.insert(MODULES, require(PanelFolder:WaitForChild("Debug")))
+end
 
 local PanelManager = {}
 
@@ -5438,6 +5782,13 @@ local function render(id: string)
 	local list = entry.panel.list
 	local pos = list.CanvasPosition
 	entry.ctx.trade = tradeState
+	local feature = entry.module.feature
+	if feature and Config.Features[feature] == false then
+		PanelKit.Clear(entry.panel)
+		entry.panel.subtitle.Text = ""
+		PanelKit.Note(entry.panel, 1, "🔧 " .. (Config.FeatureNames[feature] or feature) .. " 기능은 지금 점검 중이에요. 곧 돌아올게요!")
+		return
+	end
 	entry.module.render(entry.panel, snapshot, entry.ctx)
 	task.defer(function()
 		list.CanvasPosition = pos
@@ -5527,7 +5878,7 @@ function PanelManager.SetTrade(state: any)
 end
 
 return PanelManager
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">Visitors</string><string name="Source"><![CDATA[-- 🧑 NPC 관람객: 박물관마다 손님들이 돌아다니며 화석을 구경 (내 화면에서만 그림, 서버 부담 없음)
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">Visitors</string><string name="Source"><![CDATA[-- 🧑 NPC 관람객: 박물관마다 손님들이 돌아다니며 화석을 구경 (내 화면에서만 그림, 서버 부담 없음)
 -- 손님 수는 박물관 매력도(전시한 화석 등급의 합)에 따라 늘어나요.
 -- 실제 좋아요 판정은 서버가 하고, 여기서는 하트 연출만 보여줘요.
 local RunService = game:GetService("RunService")
@@ -5774,7 +6125,7 @@ function Visitors.Init()
 end
 
 return Visitors
-]]></string></Properties></Item><Item class="Folder" referent="RBX00000029"><Properties><string name="Name">Panels</string></Properties><Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">Collection</string><string name="Source"><![CDATA[-- 📖 화석 도감: 지역별 탭, 조각 현황, 조립, 중복 판매
+]]></string></Properties></Item><Item class="Folder" referent="RBX0000002B"><Properties><string name="Name">Panels</string></Properties><Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">Collection</string><string name="Source"><![CDATA[-- 📖 화석 도감: 지역별 탭, 조각 현황, 조립, 중복 판매
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -5953,7 +6304,44 @@ function Collection.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 end
 
 return Collection
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">Helpers</string><string name="Source"><![CDATA[-- 🦖 발굴 조수: 고용, 데리고 다니기
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">Debug</string><string name="Source"><![CDATA[-- 🛠️ Studio 전용 테스트 메뉴 (실제 게임에서는 버튼이 보이지 않고, 서버도 거절함)
+local Gui = require(script.Parent.Parent.Gui)
+local PanelKit = require(script.Parent.Parent.PanelKit)
+
+local Debug = {
+	id = "Debug",
+	title = "🛠️ 테스트 메뉴 (Studio 전용)",
+	color = Color3.fromRGB(255, 120, 60),
+	tabs = false,
+}
+
+local COMMANDS = {
+	{ "Coins", "💰 코인 +1억", "후반 도구, 지역, 조수 사보기" },
+	{ "CoinsHuge", "💰 코인 +1조", "블랙홀 드릴, 환생 여러 번 해보기" },
+	{ "Zones", "🗺️ 모든 지역 열기", "빙하, 화산, 해안 바로 가보기" },
+	{ "Meteor", "☄️ 운석 지금 시작", "8분 안 기다리고 운석 이벤트 확인" },
+	{ "Pieces", "🦴 모든 조각 +1개", "조립, 3D 전시, NPC 손님 확인" },
+	{ "Luck", "🍀 행운 부스트 15분", "희귀 화석 연출(빛기둥) 확인" },
+	{ "Quests", "📜 퀘스트 모두 완료", "퀘스트 보상 받기 확인" },
+	{ "NewDay", "📅 하루 지나기", "매일 보상, 새 퀘스트, 좋아요 다시 누르기" },
+	{ "Likes", "❤️ 좋아요 늘리기", "좋아요 보너스, 표시 확인" },
+	{ "Reset", "🧹 데이터 초기화", "처음 시작하는 사람처럼 다시 해보기" },
+}
+
+function Debug.render(panel: PanelKit.Panel, _snapshot: any, ctx: any)
+	PanelKit.Clear(panel)
+	panel.subtitle.Text = "이 메뉴는 Studio 에서만 보여요. 실제 게임에는 나오지 않아요."
+	for i, command in COMMANDS do
+		local row = PanelKit.Row(panel, i, 54)
+		PanelKit.RowText(row, command[2], command[3])
+		PanelKit.RowButton(row, "실행", if command[1] == "Reset" then Gui.Colors.Red else Color3.fromRGB(230, 110, 50), function()
+			ctx.request("Debug", command[1])
+		end)
+	end
+end
+
+return Debug
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">Helpers</string><string name="Source"><![CDATA[-- 🦖 발굴 조수: 고용, 데리고 다니기
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -5967,6 +6355,7 @@ local Helpers = {
 	title = "🦖 발굴 조수",
 	color = Color3.fromRGB(120, 210, 100),
 	tabs = false,
+	feature = "Helpers",
 }
 
 function Helpers.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
@@ -6020,7 +6409,7 @@ function Helpers.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 end
 
 return Helpers
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">Quests</string><string name="Source"><![CDATA[-- 📜 퀘스트 + 🎁 매일 보상
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">Quests</string><string name="Source"><![CDATA[-- 📜 퀘스트 + 🎁 매일 보상
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -6129,7 +6518,7 @@ function Quests.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 end
 
 return Quests
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">Rebirth</string><string name="Source"><![CDATA[-- 🔁 환생
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">Rebirth</string><string name="Source"><![CDATA[-- 🔁 환생
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -6142,6 +6531,7 @@ local Rebirth = {
 	title = "🔁 환생",
 	color = Color3.fromRGB(255, 140, 255),
 	tabs = false,
+	feature = "Rebirth",
 }
 
 function Rebirth.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
@@ -6194,7 +6584,7 @@ function Rebirth.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 end
 
 return Rebirth
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">Shop</string><string name="Source"><![CDATA[-- 🛒 상점: 도구, 전시대, Robux
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">Shop</string><string name="Source"><![CDATA[-- 🛒 상점: 도구, 전시대, Robux
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -6357,7 +6747,7 @@ function Shop.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 end
 
 return Shop
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">Trade</string><string name="Source"><![CDATA[-- 🤝 거래: 플레이어 목록 → 요청 → 서로 조각/코인 올리기 → 둘 다 준비하면 교환
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000029"><Properties><string name="Name">Trade</string><string name="Source"><![CDATA[-- 🤝 거래: 플레이어 목록 → 요청 → 서로 조각/코인 올리기 → 둘 다 준비하면 교환
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -6373,6 +6763,7 @@ local Trade = {
 	title = "🤝 거래",
 	color = Color3.fromRGB(100, 200, 255),
 	tabs = false,
+	feature = "Trade",
 }
 
 local function pieceLabel(speciesId: string, pieceIndex: number): (string, Color3)
@@ -6520,7 +6911,7 @@ function Trade.render(panel: PanelKit.Panel, snapshot: any, ctx: any)
 end
 
 return Trade
-]]></string></Properties></Item><Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">Zones</string><string name="Source"><![CDATA[-- 🗺️ 발굴 지역: 열기, 이동
+]]></string></Properties></Item><Item class="ModuleScript" referent="RBX0000002A"><Properties><string name="Name">Zones</string><string name="Source"><![CDATA[-- 🗺️ 발굴 지역: 열기, 이동
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)

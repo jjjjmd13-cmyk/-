@@ -40,7 +40,7 @@ local function updateSign(plot: Model, player: Player?, data: any?)
 	if player and data then
 		setText(plot:FindFirstChild("Sign"), "Title", player.DisplayName .. "의 박물관")
 		setText(plot:FindFirstChild("LikeStand"), "Likes", "❤️ " .. Util.FormatNumber(data.likes) .. "\n🧑 " .. Util.FormatNumber(data.npcLikes))
-		plot:SetAttribute("Appeal", Economy.GetAppeal(data))
+		plot:SetAttribute("Appeal", if Config.Features.NpcVisitors == false then 0 else Economy.GetAppeal(data))
 		plot:SetAttribute("Displayed", math.min(#Economy.GetDisplayed(data), data.slots))
 	else
 		setText(plot:FindFirstChild("Sign"), "Title", "빈 박물관")
@@ -324,7 +324,8 @@ function MuseumService.Init(builtWorld: any)
 	task.spawn(function()
 		while true do
 			task.wait(Config.NpcLikeInterval)
-			for player, plot in playerPlot do
+			local targets = if Config.Features.NpcVisitors == false then {} else playerPlot
+			for player, plot in targets do
 				local data = DataService.Get(player)
 				if data then
 					local appeal = Economy.GetAppeal(data)

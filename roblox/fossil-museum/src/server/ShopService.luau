@@ -110,7 +110,7 @@ Net.Handle("BuyHelper", function(player, helperId)
 	end
 	Net.MarkDirty(player)
 	return true, "🦖 " .. helper.name .. " 고용 완료!"
-end)
+end, "Helpers")
 
 Net.Handle("EquipHelper", function(player, helperId)
 	local data = DataService.Get(player)
@@ -127,7 +127,7 @@ Net.Handle("EquipHelper", function(player, helperId)
 	table.insert(data.helpersEquipped, helper.id)
 	Net.MarkDirty(player)
 	return true, nil
-end)
+end, "Helpers")
 
 Net.Handle("UnequipHelper", function(player, helperId)
 	local data = DataService.Get(player)
@@ -165,7 +165,7 @@ Net.Handle("Rebirth", function(player)
 	Net.MarkDirty(player)
 	Net.Announce(string.format("🔁 %s님이 %d번째 환생을 했어요!", player.DisplayName, data.rebirths), Color3.fromRGB(255, 160, 255))
 	return true, string.format("🔁 환생 완료! 수입 +%d%%, 코인 +%d%%, 행운 +%d%%", math.floor(data.rebirths * Config.Rebirth.incomeBonus * 100), math.floor(data.rebirths * Config.Rebirth.coinBonus * 100), math.floor(data.rebirths * Config.Rebirth.luckBonus * 100 + 0.5))
-end)
+end, "Rebirth")
 
 Net.Handle("ToggleAutoDig", function(player)
 	local data = DataService.Get(player)

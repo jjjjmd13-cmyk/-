@@ -2,6 +2,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Config = require(ReplicatedStorage.Shared.Config)
 local Economy = require(ReplicatedStorage.Shared.Economy)
 local DataService = require(script.Parent.DataService)
 local Passes = require(script.Parent.Passes)
@@ -33,9 +34,15 @@ Net.Changed = changedEvent.Event -- (player) 데이터 구조가 바뀜 (조각,
 local handlers: { [string]: (Player, ...any) -> any } = {}
 local lastCalls: { [Player]: { number } } = {}
 
+local features: { [string]: string } = {} -- [action] = 기능 이름
+
 -- 버튼 요청 처리 함수 등록. 반환값: (성공 여부, 메시지)
-function Net.Handle(action: string, fn: (Player, ...any) -> any)
+-- feature 를 주면 Config.Features[feature] 가 false 일 때 "점검 중"으로 거절
+function Net.Handle(action: string, fn: (Player, ...any) -> any, feature: string?)
 	handlers[action] = fn
+	if feature then
+		features[action] = feature
+	end
 end
 
 Net.Action.OnServerInvoke = function(player: Player, action: any, ...: any)
@@ -56,6 +63,10 @@ Net.Action.OnServerInvoke = function(player: Player, action: any, ...: any)
 
 	if not DataService.Get(player) then
 		return false, "데이터를 불러오는 중이에요"
+	end
+	local feature = features[action]
+	if feature and Config.Features[feature] == false then
+		return false, "🔧 " .. (Config.FeatureNames[feature] or feature) .. " 기능은 지금 점검 중이에요"
 	end
 	local ok, success, message = pcall(handlers[action], player, ...)
 	if not ok then

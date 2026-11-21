@@ -27,7 +27,7 @@ local lastLockedWarn: { [Player]: number } = {}
 local contributions: { [BasePart]: { [Player]: number } } = {}
 
 -- 흙더미가 부서졌을 때 판 사람 모두에게 판 만큼 보상 (2명 이상이면 보너스)
-local function rewardContributors(mound: BasePart, kindId: string, zoneId: string)
+local function rewardContributors(mound: BasePart, kindId: string, zoneId: string, lastHitter: Player?)
 	local list = contributions[mound] or {}
 	contributions[mound] = nil
 	local total = 0
@@ -39,6 +39,14 @@ local function rewardContributors(mound: BasePart, kindId: string, zoneId: strin
 		end
 	end
 	if total <= 0 then
+		return
+	end
+	if Config.Features.CoopShare == false then
+		-- 예전 방식: 마지막에 친 사람이 전부
+		local data = lastHitter and lastHitter.Parent and DataService.Get(lastHitter)
+		if data and lastHitter then
+			Rewards.Dig(lastHitter, data, kindId, zoneId, mound.Position)
+		end
 		return
 	end
 	local coop = count >= 2
@@ -301,7 +309,7 @@ local function onDig(player: Player, mound: any)
 	end
 
 	hideMound(mound)
-	rewardContributors(mound, kindId, zoneId)
+	rewardContributors(mound, kindId, zoneId, player)
 	if kindId == "Meteor" then
 		task.delay(1, function()
 			mound:Destroy()
@@ -362,7 +370,18 @@ local function spawnMeteor(zoneWorld: any)
 	CollectionService:AddTag(meteor, TAG)
 end
 
+local forceMeteor = false
+
+-- Studio 테스트 메뉴: 다음 운석을 바로 시작
+function DigService.StartMeteorNow()
+	forceMeteor = true
+end
+
 local function meteorLoop()
+	if Config.Features.Meteor == false then
+		ReplicatedStorage:SetAttribute("MeteorActive", false)
+		return
+	end
 	local first = true
 	while true do
 		local waitTime = Config.MeteorInterval
@@ -371,8 +390,12 @@ local function meteorLoop()
 		end
 		first = false
 		ReplicatedStorage:SetAttribute("MeteorActive", false)
-		ReplicatedStorage:SetAttribute("NextMeteorAt", workspace:GetServerTimeNow() + waitTime)
-		task.wait(waitTime)
+		local startAt = workspace:GetServerTimeNow() + waitTime
+		ReplicatedStorage:SetAttribute("NextMeteorAt", startAt)
+		while workspace:GetServerTimeNow() < startAt and not forceMeteor do
+			task.wait(0.5)
+		end
+		forceMeteor = false
 
 		ReplicatedStorage:SetAttribute("MeteorActive", true)
 		ReplicatedStorage:SetAttribute("MeteorEndsAt", workspace:GetServerTimeNow() + Config.MeteorDuration)
