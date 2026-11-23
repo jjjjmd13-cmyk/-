@@ -109,7 +109,7 @@ src/
 
 1. **최대 인원 12명**: Game Settings → Places → Max Players를 12로 설정해요. 박물관 부지가 12개예요 (`Config.PlotCount`).
    - 친구랑만 하고 싶다면 Creator Dashboard → Monetization → **Private Servers**를 켜세요. 무료 또는 Robux 월 구독으로 정할 수 있어요.
-2. **게임 패스와 개발자 상품 만들기**: Creator Dashboard → 내 게임 → Monetization → Passes / Developer Products에서 만들어요.
+2. **게임 패스와 개발자 상품 만들기** (게임 패스는 [`게임패스.md`](게임패스.md)에 이름, 설명, 추천 가격, 아이콘, 등록 순서가 있어요): Creator Dashboard → 내 게임 → Monetization → Passes / Developer Products에서 만들어요.
    - 게임 패스: ⚡ 발굴 속도 2배, 🍀 행운 2배, 🏛️ 박물관 수입 2배, 🤖 자동 발굴, 🦖 조수 칸 +2
    - 개발자 상품: 코인 주머니, 코인 상자, 코인 금고, 행운 부스트 15분, 🌟 서버 전체 행운 2배 15분
    - 만든 ID를 `src/shared/Config.luau` 맨 위의 `id = 0` 자리에 넣어요. ID가 0이면 상점에 "준비 중"으로 표시돼요.
